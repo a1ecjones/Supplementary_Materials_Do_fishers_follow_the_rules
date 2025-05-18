@@ -1,0 +1,49 @@
+---
+title: "urchin_RLS_manu"
+author: "Alec Jones"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+   toc: true
+---
+
+   <script src="hideOutput.js"></script> 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+```
+
+For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
+
+# Loading in the data
+
+For this analysis I will be using four years of data from the RLS surveys instead of only 1. I will need to download the RLS data from the website and combine the three files together (mobile fish, cryptobenthic fish, macroinverts)
+
+```{r Downloading the macroinvert data, echo=FALSE}
+#Reading in the macroinvert data from the csv downloaded from the RLS website
+
+macroinvert_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_mobile_macroinvertebrate_abundance.csv"))
+```
+
+```{r Loading in the cryptobenthic fish data, echo=FALSE}
+cryptobenthic_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_cryptobenthic_fish_abundance.csv"))
+```
+
+```{r Loading in the mobile fish data, echo=FALSE}
+mobile_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_reef_fish_abundance_and_biomass.csv"))
+```
+
+testing the data
+
+```{r}
+test_mobile <- mobile_fish_data_raw%>%
+  filter(site_code == "BMSC1" & reporting_name == "Rhinogobiops nicholsii" 
+         & survey_date == "2023-05-15")
+
+test_cryptic <- cryptobenthic_fish_data_raw%>%
+  filter(site_code == "BMSC1" & reporting_name == "Rhinogobiops nicholsii" 
+         & survey_date == "2023-05-15")
+```
+
