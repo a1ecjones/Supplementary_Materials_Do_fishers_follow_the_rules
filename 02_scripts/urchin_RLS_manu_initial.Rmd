@@ -38,13 +38,13 @@ mobile_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_reef_fish_ab
 ## Testing the data
 
 ```{r Testing to see if the fish data needs to be combined or not}
-test_mobile <- mobile_fish_data_raw%>%
-  filter(site_code == "BMSC1" & reporting_name == "Rhinogobiops nicholsii" 
-         & survey_date == "2023-05-15")
+#test_mobile <- mobile_fish_data_raw%>%
+ # filter(site_code == "BMSC1" & reporting_name == "Rhinogobiops nicholsii" 
+    #     & survey_date == "2023-05-15")
 
-test_cryptic <- cryptobenthic_fish_data_raw%>%
-  filter(site_code == "BMSC1" & reporting_name == "Rhinogobiops nicholsii" 
-         & survey_date == "2023-05-15")
+#test_cryptic <- cryptobenthic_fish_data_raw%>%
+#  filter(site_code == "BMSC1" & reporting_name == "Rhinogobiops nicholsii" 
+   #      & survey_date == "2023-05-15")
 ```
 
 After checking it appears that the cryptic fish and mobile fish csv files need to be combined and then the counts match up with the Excel sheet supplied.
@@ -141,7 +141,7 @@ mutate(latitude = if_else(site_code == "BMSC21", 48.85205078, latitude))%>%
  mutate(longitude = if_else(site_code == "BMSC26", -125.037017, longitude))%>% 
   
      mutate(latitude = if_else(site_code == "BMSC27", 48.901183, latitude))%>%
- mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))
+ mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))%>%
 ```
 
 ```{r Converting to form with a column for each species}
@@ -152,5 +152,33 @@ overall_rls_data_raw_wide <- overall_rls_data_raw_lat_long%>%
   summarise(site_count = sum(total))
 
 overall_rls_data_raw_wide$reporting_name <- as.factor(overall_rls_data_raw_wide$reporting_name)
+
+overall_rls_data_raw_wide <- overall_rls_data_raw_wide%>%
+  mutate(reporting_name = str_replace_all(reporting_name, " ", "_"))%>%
+  pivot_wider(
+    names_from = reporting_name,
+    values_from = site_count,
+    values_fill = 0
+  )
+```
+
+
+```{r Cutting the other sites and adding the information to do some modelling}
+#Cutting the other sites
+overall_rls_data_clean <- overall_rls_data_raw_wide%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3",
+                          "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182, seq(7, 181, by = 1))]
 ```
 
