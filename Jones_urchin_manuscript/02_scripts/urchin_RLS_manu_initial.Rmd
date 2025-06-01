@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(here)
+library(sdmTMB)
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -141,7 +142,7 @@ mutate(latitude = if_else(site_code == "BMSC21", 48.85205078, latitude))%>%
  mutate(longitude = if_else(site_code == "BMSC26", -125.037017, longitude))%>% 
   
      mutate(latitude = if_else(site_code == "BMSC27", 48.901183, latitude))%>%
- mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))
 ```
 
 ```{r Converting to form with a column for each species}
@@ -182,3 +183,33 @@ mutate(protection_status = case_when(
 overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182, seq(7, 181, by = 1))]
 ```
 
+## Making some specific columns for modelling
+
+
+```{r Making specific groups for modelling}
+overall_rls_data_groups <- overall_rls_data_clean%>%
+  mutate(total_urchins = Mesocentrotus_franciscanus + Strongylocentrotus_purpuratus + Strongylocentrotus_droebachiensis,
+         total_fish = Actinopterygii_spp. + Anarrhichthys_ocellatus + Anoplarchus +
+           Apodichthys_flavidus + Artedius_fenestralis + Artedius_harringtoni + Artedius_lateralis+
+           Ascelichthys_rhodorus + Asemichthys_taylori + Aulorhynchus_flavidus + Brachyistius_frenatus +
+           Chirolophis_nugator + Citharichthys_stigmaeus + Clinocottus_acuticeps + Cottid_spp. +
+           Cymatogaster_aggregata + Embiotoca_lateralis + Enophrys_bison + Gibbonsia_metzi + Gobiesox_maeandricus +
+           Hemilepidotus + Hemilepidotus_hemilepidotus + Hemilepidotus_spinosus + Hexagrammos +
+           Hexagrammos_decagrammus + Hexagrammos_stelleri + Jordania_zonope + Liparis_florae + Myoxocephalus_aenaeus +
+           Myoxocephalus_polyacanthocephalus + Oligocottus_maculosus + Ophiodon_elongatus + Orthonopias_triacis+
+           Oxylebius_pictus + Phoca_vitulina + Pholis + Pholis_clemensi + Pholis_gunnellus + Pholis_laeta +
+           Pholis_ornata + Pleuronichthys_coenosus + Porichthys_notatus + Rhacochilus_vacca +
+           Rhamphocottus_richardsonii + Rhinogobiops_nicholsii + Rhinogobiops_nicholsii +
+           Scorpaenichthys_marmoratus + Sebastes_caurinus + Sebastes_flavidus + Sebastes_maliger + Sebastes_melanops +
+           Sebastes_nebulosus + Sebastes_pinniger + Sebastes_spp. + Synchirus_gilli + Zalophus_californianus,
+         total_rockfish = Sebastes_spp. + Sebastes_pinniger + Sebastes_caurinus + Sebastes_maliger + Sebastes_melanops +
+           Sebastes_nebulosus + Sebastes_flavidus)
+```
+
+```{r}
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_rockfish))+
+  geom_boxplot()
+```
+
+
+# Initial modelling
