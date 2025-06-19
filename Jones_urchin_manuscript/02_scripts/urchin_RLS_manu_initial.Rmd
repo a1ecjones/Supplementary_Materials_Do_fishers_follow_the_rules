@@ -14,6 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(here)
 library(sdmTMB)
+library(sf)
+library(sdmTMB)
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -49,6 +51,9 @@ mobile_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_reef_fish_ab
 ```
 
 After checking it appears that the cryptic fish and mobile fish csv files need to be combined and then the counts match up with the Excel sheet supplied.
+
+
+# Cleaning up the data for use
 
 ## Combining the three dfs into one overall and cleaning up for use
 
@@ -180,7 +185,11 @@ mutate(protection_status = case_when(
   site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
 ))
 
-overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182, seq(7, 181, by = 1))]
+overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182,
+                                                    seq(7, 181, by = 1))]
+
+overall_rls_data_clean$site_code <- as.factor(overall_rls_data_clean$site_code)
+overall_rls_data_clean$site_name <- as.factor(overall_rls_data_clean$site_name)
 ```
 
 ## Making some specific columns for modelling
@@ -212,4 +221,375 @@ ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_rockfish))+
 ```
 
 
+## Adding recreational fishing boat location data to the data frame
+
+In my honours I used recreational fishing boat fishing locations to support the classifications of sites as either protected or unprotected. I will be including that analysis within this project as well but will be updating it slightly to use a geometric mean instead to account for the skew in the counts.
+
+In order to use the site protection status as a predictor, we needed to find
+support for the fact that there was in fact a difference in the human impacts
+between protected and unprotected sites.
+
+To do this we used DFO flyover survey data that included the positions of where
+recreational fishing boats were located in Barkley Sound. 
+
+We used the DFO flyover counts of recreational boats actively fishing to 
+calculate the annual mean number of recreational boats fishing within a given 
+radius of each site to support the site protection status classifications and 
+show that human impacts were higher for unprotected sites. To calculate the 
+annual mean number of recreational boats fishing within a given radius of each 
+site, we constructed circular polygons around each site (radii = 1 km, 1.5 km, 
+2 km) using R (R Core Team, 2024). We merged these polygons with the DFO 
+recreational boat counts to extract how many boats were spotted within the 
+radius in each year. To get the annual mean, we averaged these counts across 
+the three years of data from DFO (2021, 2022, 2023). We omitted aerial surveys 
+where parts of Barkley Sound were obscured by fog.
+
+### Loading in the DFO survey data
+
+#### Loading in the 2023 data
+
+```{r Loading in the  2023 DFO data}
+DFO_data_raw_2023 <- read_csv(here("./01_raw_data/DFO_data/Overflight2023_ObservationPoints_20241024.csv"))
+
+#Makes list of the variables that need to be converted to factors below
+dfo_factors <- c("Day Type", "Creel Subarea")
+
+#takes the raw data and cleans it up
+rec_boats_fishing2023 <- DFO_data_raw_2023%>%
+  #converts the variables specified above to factors
+  mutate_at(dfo_factors, factor)%>%
+  #renaming the columns to make them easier to code with
+  rename(rec_boats_fishing = `1. Rec Boat Fishing`,
+         rec_boats_running = `2. Rec Boats Running`,
+         comm_vessel_fishing = `3. Commercial Vessel Fishing`,
+         comm_vessel_not_fishing = `4. Commercial Vessel Not Fishing`,
+         small_comm_vessel = `5. Small Commercial Vessel`,
+         large_comm_vessel = `6. Large Commercial Vessel`,
+         whale_watching = `7.  Whale Watching Boat`,
+         orcas = `8. Orcas`,
+         whales = `9. Whales`,
+         sea_state = `10. Sea State`)%>%
+  #Replacing the cells that have "Null" with 0 and converting the count columns
+  #to numeric
+  mutate(across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), ~ ifelse(. == "<Null>", 0, .)),
+         across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), as.numeric))%>%
+  ##This code will remove the dates of the flights that had fog
+  filter(!Date %in% c("2023-06-23", "2023-07-16", "2023-07-31", "2023-08-06", "2023-08-28",
+                      "2023-08-29", "2023-09-09", "2023-09-15"))%>%
+  #Selecting only the rows where recreational boats were fishing
+  filter(rec_boats_fishing != 0)%>%
+  #selecting all of the columns that are needed for further analysis
+    select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
+           `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+```
+
+
+#### Loading in the 2022 data
+
+```{r Loading in the 2022 DFO data}
+DFO_data_raw_2022 <- read_csv(here("./01_raw_data/DFO_data/Overflight2022_ObservationPoints_20240124_COUNTS.csv"))
+
+#dfo_factors <- c("Day Type", "Creel Subarea")
+
+rec_boats_fishing2022 <- DFO_data_raw_2022%>%
+  mutate_at(dfo_factors, factor)%>%
+  rename(rec_boats_fishing = `1. Rec Boat Fishing`,
+         rec_boats_running = `2. Rec Boats Running`,
+         comm_vessel_fishing = `3. Commercial Vessel Fishing`,
+         comm_vessel_not_fishing = `4. Commercial Vessel Not Fishing`,
+         small_comm_vessel = `5. Small Commercial Vessel`,
+         large_comm_vessel = `6. Large Commercial Vessel`,
+         whale_watching = `7.  Whale Watching Boat`,
+         orcas = `8. Orcas`,
+         whales = `9. Whales`,
+         sea_state = `10. Sea State`)%>%
+  mutate(across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), ~ ifelse(. == "<Null>", 0, .)),
+         across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), as.numeric))%>%
+   ##This code will remove the dates of the flights that had fog
+  filter(!Date %in% c("2022-06-18", "2022-07-31", "2022-08-24", "2022-06-04"))%>%
+    filter(rec_boats_fishing != 0)%>%
+  #selecting all of the columns that are needed for further analysis
+    select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
+           `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+```
+
+
+#### Loading in the 2021 data
+
+```{r Loading in the 2021 DFO data}
+DFO_data_raw_2021 <- read_csv(here("./01_raw_data/DFO_data/Overflight2021_ObservationPoints_20240321_counts.csv"))
+
+#dfo_factors <- c("Day Type", "Creel Subarea")
+
+rec_boats_fishing2021 <- DFO_data_raw_2021%>%
+  mutate_at(dfo_factors, factor)%>%
+  rename(rec_boats_fishing = `1. Rec Boat Fishing`,
+         rec_boats_running = `2. Rec Boats Running`,
+         comm_vessel_fishing = `3. Commercial Vessel Fishing`,
+         comm_vessel_not_fishing = `4. Commercial Vessel Not Fishing`,
+         small_comm_vessel = `5. Small Commercial Vessel`,
+         large_comm_vessel = `6. Large Commercial Vessel`,
+         whale_watching = `7.  Whale Watching Boat`,
+         orcas = `8. Orcas`,
+         whales = `9. Whales`,
+         sea_state = `10. Sea State`)%>%
+  mutate(across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), ~ ifelse(. == "<Null>", 0, .)),
+         across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), as.numeric))%>%
+   ##This code will remove the dates of the flights that had fog
+  filter(!Date %in% c("2021-07-31", "2021-07-19", "2021-07-20", "2021-07-24"))%>%
+   filter(rec_boats_fishing != 0)%>%
+  select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
+           `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+```
+
+
+#### Combining the three years of data into one data frame
+```{r Combining the three years of data by row}
+rec_boats_fishing_total <- rbind(rec_boats_fishing2021, rec_boats_fishing2022, rec_boats_fishing2023)
+```
+
+### Adding the recreational fishing boat data to the data frame
+
+To add the recreational fishin boat data we first calculated the mean number of
+recreational fishing boats fishing within various radii of each RLS site. We did
+this by making circular polygons around each RLS site and then merging those 
+with the rec boat points and counting how many were in each circle each year, 
+and then averaging across the three years of data.
+
+#### Calculating the mean recreational boats fishing within each radius
+
+```{r Creating a circular radius around each site}
+#Taking the site locations from the clean data frame
+site_locations <- st_as_sf(overall_rls_data_groups, coords = c("longitude", "latitude"), crs = 4326)
+
+#removing unnecessary rows
+site_locations <- site_locations%>%
+  select(c(site_code, site_name, geometry))
+
+#Picking only the unique site locations as some sites have multiple transects
+#with the same coordinates
+site_locations_u <- site_locations%>%
+  distinct(site_code, geometry)
+
+#Changing the projection to handle meter distances better
+site_locations_u_proj_m <- st_transform(site_locations_u, crs = 3857)
+#Making circles with the different radii around each site
+site_locations_radius_1km <- st_buffer(x = site_locations_u_proj_m, dist = 1000)
+site_locations_radius_1.5km <- st_buffer(x = site_locations_u_proj_m, dist = 1500)
+site_locations_radius_2km <- st_buffer(x = site_locations_u_proj_m, dist = 2000)
+```
+
+```{r Finding the overlapping points for each site}
+#making a data frame with the coordinates of all the recreational fishing boats
+rec_boats_fishing_total_points <- st_as_sf(rec_boats_fishing_total, coords = c("Longitude", "Latitude"), crs = 4326)
+#Converting the CRS so it matches the other parts being used
+rec_boats_fishing_total_points <- st_transform(rec_boats_fishing_total_points, crs = 3857)
+
+
+#Finding the fishing boats that are within the given radius and making a new df
+#with this info
+rec_fishing_boat_total_radius_1km <- st_intersection(site_locations_radius_1km, rec_boats_fishing_total_points)
+
+rec_fishing_boat_total_radius_1.5km <- st_intersection(site_locations_radius_1.5km, rec_boats_fishing_total_points)
+
+rec_fishing_boat_total_radius_2km <- st_intersection(site_locations_radius_2km, rec_boats_fishing_total_points)
+```
+
+```{r Making dataframes with boat counts summed for each year at each site}
+#Here I took the data frames with the counts and points of boats within the
+#radii of the sites and I summed the number of boats counted around a site
+#within each year. For example, I added all of the boats around Eagle bay in
+#2021
+
+rec_fishing_boat_total_radius_1km_summed <- rec_fishing_boat_total_radius_1km%>%
+  #Grouping by each site in each year
+  group_by(site_code, Year)%>%
+  #adding up the number of boats around a site in each year
+  summarise(yearly_rec_boats_fishing = sum(rec_boats_fishing))
+
+rec_fishing_boat_total_radius_1.5km_summed <- rec_fishing_boat_total_radius_1.5km%>%
+  group_by(site_code, Year)%>%
+  summarise(yearly_rec_boats_fishing = sum(rec_boats_fishing))
+
+rec_fishing_boat_total_radius_2km_summed <- rec_fishing_boat_total_radius_2km%>%
+  group_by(site_code, Year)%>%
+  summarise(yearly_rec_boats_fishing = sum(rec_boats_fishing))
+```
+
+```{r Making a total dataframe for each so that years with no boats have a 0 counts}
+#For some sites that had boats counted in one particular year at a given radius
+#did not have counts in all years. This step made data frames with a list of all
+#of the sites that had at least some counts at the given radius in one of the 
+#years and then made a row for each of the three years for that site.
+
+#Makes a row for all three years for sites that had a least one boat counted
+#in one of the years
+all_sites_years_1km <- expand.grid(
+  site_code = unique(rec_fishing_boat_total_radius_1km$site_code),
+  Year = unique(rec_fishing_boat_total_radius_1km$Year))
+
+all_sites_years_1.5km <- expand.grid(
+  site_code = unique(rec_fishing_boat_total_radius_1.5km$site_code),
+  Year = unique(rec_fishing_boat_total_radius_1.5km$Year))
+
+all_sites_years_2km <- expand.grid(
+  site_code = unique(rec_fishing_boat_total_radius_2km$site_code),
+  Year = unique(rec_fishing_boat_total_radius_2km$Year))
+```
+
+```{r Merging the all years df with the rec boat count sums}
+#This step merged the summed boat counts at each site with the dataframe that
+# had all three years listed so that there was a row with 0 for the sites which
+#did not have any counts in a particular year. This was necessary for making the
+#average calculation accurate.
+
+rec_fishing_boat_total_radius_1km_complete <- all_sites_years_1km %>%
+  #Joins the rec fishing boat counts within radius to the df with all the years
+  #for each site by site and year
+  left_join(rec_fishing_boat_total_radius_1km_summed, by = c("site_code", "Year")) %>%
+  #replaces the rows that have NAs with 0
+  mutate(yearly_rec_boats_fishing = replace_na(yearly_rec_boats_fishing, 0))
+
+rec_fishing_boat_total_radius_1.5km_complete <- all_sites_years_1.5km %>%
+  left_join(rec_fishing_boat_total_radius_1.5km_summed, by = c("site_code", "Year")) %>%
+  mutate(yearly_rec_boats_fishing = replace_na(yearly_rec_boats_fishing, 0))
+
+rec_fishing_boat_total_radius_2km_complete <- all_sites_years_2km %>%
+  left_join(rec_fishing_boat_total_radius_2km_summed, by = c("site_code", "Year")) %>%
+  mutate(yearly_rec_boats_fishing = replace_na(yearly_rec_boats_fishing, 0))
+```
+
+```{r Making the final dataframe with the average boat counts per year for each site}
+#This was the final step to average the recreational boat counts at each site 
+#across the three years of data
+
+
+rec_fishing_boat_total_radius_1km_final <- rec_fishing_boat_total_radius_1km_complete%>%
+  #groups by each site
+  group_by(site_code)%>%
+  #makes a new column with the mean number of boats counted within each sites 
+  #radius
+  summarise(mean_rec_boat_counts_1km = mean(yearly_rec_boats_fishing))
+
+rec_fishing_boat_total_radius_1.5km_final <- rec_fishing_boat_total_radius_1.5km_complete%>%
+  group_by(site_code)%>%
+  summarise(mean_rec_boat_counts_1.5km = mean(yearly_rec_boats_fishing))
+
+rec_fishing_boat_total_radius_2km_final_test <- rec_fishing_boat_total_radius_2km_complete%>%
+  group_by(site_code)%>%
+  summarise(mean_rec_boat_counts_2km = mean(yearly_rec_boats_fishing))
+```
+
+```{r Adding the avg counts to the main dataset}
+#This step added each of the data frames with the average rec boat counts
+# to the modelling dataset. The resulting dataset has a column for avg 
+#rec boat counts for each radius distance
+overall_rls_data_final <- overall_rls_data_groups%>%
+ left_join(rec_fishing_boat_total_radius_1km_final, by = c("site_code"))%>%
+ left_join(rec_fishing_boat_total_radius_1.5km_final, by = c("site_code"))%>%
+  left_join(rec_fishing_boat_total_radius_2km_final, by = c("site_code"))%>%
+  replace(is.na(.), 0)
+```
+
+
+## Adding a column for year to the data frame
+
+```{r Adding a column for year}
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_final$year <- format(overall_rls_data_final$survey_date, "%Y")
+
+#reordering the df
+overall_rls_data_final <- overall_rls_data_final[,c(seq(1, 5, by = 1), 189,
+                                                    seq(6, 188, by = 1))]
+
+overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
+```
+
+
+## Set up for doing spatial analyses on the data
+
+### Adding columns of projected coordinates for the sites
+
+```{r Adding a column of projected locations for the sites}
+#changing the data frame to have the coordinates as a geometry type in WGS84
+overall_rls_data_final_geo <- st_as_sf(overall_rls_data_final, 
+                                       coords = c("longitude", "latitude"),
+                                       crs = 4326)
+#converting the coordinates to a projection from around Vancouver Island
+overall_rls_data_final_proj <- st_transform(overall_rls_data_final_geo, crs = 32610)
+
+#Extracting the projected coordinates
+coords_utm <- st_coordinates(overall_rls_data_final_proj)
+
+#adding the projected coordinates to the main data frame
+overall_rls_data_final$easting <- coords_utm[,1]
+overall_rls_data_final$northing <- coords_utm[,2]
+
+#adding columns with the data in km
+overall_rls_data_final$easting_km <- overall_rls_data_final$easting / 1000
+overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
+```
+
+### Making a mesh of the sites
+
+```{r Creating a mesh of the RLS sites}
+mesh_RLS <- make_mesh(overall_rls_data_final, xy_cols = c("easting_km", "northing_km"),
+                      cutoff = 1)
+
+plot(mesh_RLS)
+```
+
+
 # Initial modelling
+
+I will be using the sdmTMB package to create models looking at the abundances/densities of urchins, fish, and other invertebrates at the RLS sites within Barkley Sound. The models will be based on the protection status of the survey sites as the predictor variable.
+
+## Urchin Modelling
+
+I will be starting with a model looking at the number of urchins overall at the different sites, and then I will make specific models for each of the three main urchin species.
+
+```{r Urchin model}
+urch_mod <- sdmTMB(total_urchins ~ protection_status,
+                   data = overall_rls_data_final,
+                   mesh = mesh_RLS,
+                   time = "year",
+                   family = tweedie(link = "log"),
+                   spatial = "on",
+                   spatiotemporal = "IID")
+urch_mod
+
+sanity(urch_mod)
+
+tidy(urch_mod, conf.int = TRUE)
+
+tidy(urch_mod, "ran_pars", conf.int = TRUE)
+```
+
+```{r Inspecting fit of urchin model}
+set.seed(123)
+overall_rls_data_final$resids <- simulate(urch_mod, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(urch_mod)
+```
+
+```{r Plotting spatial residuals}
+ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids$observed))+
+  scale_colour_gradient2()+
+  geom_point()+
+  facet_wrap(~year)+
+  coord_fixed()
+
+```
+
