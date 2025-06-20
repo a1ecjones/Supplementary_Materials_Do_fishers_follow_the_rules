@@ -487,7 +487,7 @@ rec_fishing_boat_total_radius_1.5km_final <- rec_fishing_boat_total_radius_1.5km
   group_by(site_code)%>%
   summarise(mean_rec_boat_counts_1.5km = mean(yearly_rec_boats_fishing))
 
-rec_fishing_boat_total_radius_2km_final_test <- rec_fishing_boat_total_radius_2km_complete%>%
+rec_fishing_boat_total_radius_2km_final <- rec_fishing_boat_total_radius_2km_complete%>%
   group_by(site_code)%>%
   summarise(mean_rec_boat_counts_2km = mean(yearly_rec_boats_fishing))
 ```
@@ -559,7 +559,11 @@ I will be using the sdmTMB package to create models looking at the abundances/de
 
 ## Urchin Modelling
 
-I will be starting with a model looking at the number of urchins overall at the different sites, and then I will make specific models for each of the three main urchin species.
+I will be starting with a model looking at the number of urchins overall at the different sites, and then I will make specific models for each of the three main urchin species. 
+
+I will try with a few different likely distributional families and then see which ones fits the data the best.
+
+### Tweedie
 
 ```{r Urchin model}
 urch_mod <- sdmTMB(total_urchins ~ protection_status,
@@ -568,7 +572,7 @@ urch_mod <- sdmTMB(total_urchins ~ protection_status,
                    time = "year",
                    family = tweedie(link = "log"),
                    spatial = "on",
-                   spatiotemporal = "IID")
+                   spatiotemporal = "off")
 urch_mod
 
 sanity(urch_mod)
@@ -590,6 +594,37 @@ ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = res
   geom_point()+
   facet_wrap(~year)+
   coord_fixed()
-
 ```
 
+### Poisson
+
+```{r Urchin model}
+urch_mod_poi <- sdmTMB(total_urchins ~ protection_status,
+                   data = overall_rls_data_final,
+                   mesh = mesh_RLS,
+                   time = "year",
+                   family = poisson(link = "log"),
+                   spatial = "on",
+                   spatiotemporal = "off")
+urch_mod_poi
+
+sanity(urch_mod_poi)
+
+tidy(urch_mod_poi, conf.int = TRUE)
+
+tidy(urch_mod_poi, "ran_pars", conf.int = TRUE)
+```
+
+```{r Inspecting fit of urchin model}
+set.seed(123)
+overall_rls_data_final$resids_poi <- simulate(urch_mod_poi, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(urch_mod_poi)
+```
+
+```{r Plotting spatial residuals}
+ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids_poi$observed))+
+  scale_colour_gradient2()+
+  geom_point()+
+  facet_wrap(~year)+
+  coord_fixed()
+```
