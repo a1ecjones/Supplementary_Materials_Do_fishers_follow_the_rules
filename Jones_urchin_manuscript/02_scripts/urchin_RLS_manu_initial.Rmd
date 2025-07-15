@@ -605,7 +605,7 @@ predictions<-predict(urch_mod, newdata=overall_rls_data_final)
 ggplot(data=predictions, aes(x=easting_km, y = northing_km, colour = omega_s))+
   geom_point()
 
-visreg::visreg(urch_mod, "protection_status")
+#visreg::visreg(urch_mod, "protection_status")
 
 summary(urch_mod)
 ```
@@ -862,10 +862,120 @@ This was the rough version of the plot and then I saved it as a pdf and used ink
 
 ```{r Saving the site map}
 ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
-       path = here("./04_plots/manuscript_figures
-                   "), width = 165, height = 130, units = "mm")
+       path = here("./04_plots/manuscript_figures"),
+       width = 165, height = 130, units = "mm")
 ```
 
 ## Figure N: DFO Boating impacts
 
+In order to visualize how impacted each RLS site in Barkley Sound is by recreational fishing boats I am making a map of the sound with the impacts of each site represented by colour and size of point. The colours, and sizes will be binned into three or four categories so for ease of viewing.
 
+```{r Plot of the impacts of recreational fishing boats around RLS sites}
+(rec_boat_impacts <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+   #This plots the DFO plane flight path
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+   #this plots the RLS sites
+    geom_point(env_mod_data_hon, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure.report() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+
+
+
+
+
+
+For this plot we used 2023 and 1.5 km radii as examples of the data we saw for the rec boat counts
+
+```{r total rec boats within 1.5 km, fig.cap=Figure 3. Example of the raw data from DFO flyover surveys (June 1–September 30, 2023) indicating the locations of recreational boats fishing (black dots) with 1.5 km radii (red-filled circles) around each Reef Life Survey site (open black dots) in Barkley Sound, BC, Canada. Subtidal surveys were conducted at each site in April and May of 2024. The DFO surveys sometimes grouped boats that were close together as one point, so some points indicate multiple boats, but this has been omitted for ease of viewing. The flight path taken by DFO surveyors is shown (dashed blue line) with arrows showing the direction of flight. DFO surveys were completed in the summers of 2021-23. The mean numbers of recreational boats fishing within 1.0, 1.5, and 2.0 km radii per year were calculated to compare fishing activity between protected and unprotected sites.}
+(total_rec_boats_map_2023_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+   #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+  geom_point(data = rec_boats_fishing2023, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+   #this plots the RLS sites
+    geom_point(env_mod_data_hon, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure.report() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+A legend was added and the flight path line styling was edited using inkscape.
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
+       path = here("./04_plots/report_figures"), width = 160, height = 120, units = "mm")
+```
+
+
+
+# Appendix stuff
+
+## DFO Flight path and methods for counting the boats
+
+For this plot we used 2023 and 1.5 km radii as examples of the data we saw for the rec boat counts
+
+```{r total rec boats within 1.5 km, fig.cap=Figure 3. Example of the raw data from DFO flyover surveys (June 1–September 30, 2023) indicating the locations of recreational boats fishing (black dots) with 1.5 km radii (red-filled circles) around each Reef Life Survey site (open black dots) in Barkley Sound, BC, Canada. Subtidal surveys were conducted at each site in April and May of 2024. The DFO surveys sometimes grouped boats that were close together as one point, so some points indicate multiple boats, but this has been omitted for ease of viewing. The flight path taken by DFO surveyors is shown (dashed blue line) with arrows showing the direction of flight. DFO surveys were completed in the summers of 2021-23. The mean numbers of recreational boats fishing within 1.0, 1.5, and 2.0 km radii per year were calculated to compare fishing activity between protected and unprotected sites.}
+(total_rec_boats_map_2023_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+   #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+  geom_point(data = rec_boats_fishing2023, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+   #this plots the RLS sites
+    geom_point(env_mod_data_hon, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure.report() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+A legend was added and the flight path line styling was edited using inkscape.
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
+       path = here("./04_plots/report_figures"), width = 160, height = 120, units = "mm")
+```
