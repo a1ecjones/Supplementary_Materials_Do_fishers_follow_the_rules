@@ -16,6 +16,8 @@ library(here)
 library(sdmTMB)
 library(sf)
 library(sdmTMB)
+library(ggspatial)
+library(cowplot)
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -518,6 +520,23 @@ overall_rls_data_final <- overall_rls_data_final[,c(seq(1, 5, by = 1), 189,
 overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
 ```
 
+## Adding a column for region to the data frame in case we need to use it
+
+```{r Adding a column for the regions for each site}
+  overall_rls_data_final <- overall_rls_data_final%>%
+  mutate(region = case_when(
+    site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC19", "BMSC2",
+                     "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC25", "BMSC3",
+                     "BMSC4", "BMSC5", "BMSC9", "BMSC31", "BMSC33") ~ "Deer group/Bamfield",
+    site_code %in% c("BMSC13", "BMSC14", "BMSC15", "BMSC16", "BMSC17", 
+                     "BMSC18") ~ "Broken Group",
+    site_code %in% c("BMSC24", "BMSC6", "BMSC7", "BMSC8") ~ "Deep Imperial Eagle Channel",
+    site_code %in% c("BMSC26", "BMSC27", "BMSC32") ~ "Sarita"
+  ))
+
+overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 190, seq(3, 189, by = 1))]
+```
+
 
 ## Set up for doing spatial analyses on the data
 
@@ -566,11 +585,10 @@ I will try with a few different likely distributional families and then see whic
 ### Tweedie
 
 ```{r Urchin model}
-urch_mod <- sdmTMB(total_urchins ~ protection_status,
+urch_mod <- sdmTMB(total_urchins ~ protection_status + depth + total_fish,
                    data = overall_rls_data_final,
                    mesh = mesh_RLS,
-                   time = "year",
-                   family = tweedie(link = "log"),
+                   family = tweedie(),
                    spatial = "on",
                    spatiotemporal = "off")
 urch_mod
@@ -580,6 +598,16 @@ sanity(urch_mod)
 tidy(urch_mod, conf.int = TRUE)
 
 tidy(urch_mod, "ran_pars", conf.int = TRUE)
+
+
+predictions<-predict(urch_mod, newdata=overall_rls_data_final)
+
+ggplot(data=predictions, aes(x=easting_km, y = northing_km, colour = omega_s))+
+  geom_point()
+
+visreg::visreg(urch_mod, "protection_status")
+
+summary(urch_mod)
 ```
 
 ```{r Inspecting fit of urchin model}
@@ -604,7 +632,7 @@ urch_mod_poi <- sdmTMB(total_urchins ~ protection_status,
                    mesh = mesh_RLS,
                    time = "year",
                    family = poisson(link = "log"),
-                   spatial = "on",
+                   spatial = "off",
                    spatiotemporal = "off")
 urch_mod_poi
 
@@ -628,3 +656,216 @@ ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = res
   facet_wrap(~year)+
   coord_fixed()
 ```
+
+
+# Making some plots
+
+## Making a theme for all subsequent figures
+
+```{r Making theme for all subsequent figures, echo=FALSE}
+theme.figure <- function (){
+  theme_bw(base_size = 12) +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    #axis.line = element_line(colour = "black"),
+    axis.title = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 14, face = "plain"),
+    legend.text = element_text(size = 12, face = "plain"),
+    legend.title = element_text(size = 14, face = "bold")) 
+}
+```
+
+## Making site maps
+
+### Making the map ranges
+
+```{r Seting the ranges for the maps}
+#In this chunk I made limits for the maps so that they show the view of 
+#Barkley Sound that I want
+lat_min = min(overall_rls_data_final$latitude) - 0.05
+lat_max = max(overall_rls_data_final$latitude) + 0.05
+
+long_min = min(overall_rls_data_final$longitude) - 0.05
+long_max = max(overall_rls_data_final$longitude) + 0.05
+```
+
+### Loading in the low res shape file
+
+```{r Loading in the base layer}
+#I loaded in a lower res shape file that shows all of BC in order to make a
+#large inset plot of Vancouver Island. Similar to the high res shape file I 
+#subsetted it to only include the area around Vancouver Island.
+
+VI_base_layer <- read_sf(dsn = here("./01_raw_data/canada_sf_data", ""), 
+                         stringsAsFactors = F)
+VI_base_layer_sf <- st_as_sf(VI_base_layer)
+
+#specifying the projection for the sf
+st_crs(VI_base_layer_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+
+shp_xmin_low <- -129
+shp_xmax_low <- -122.5
+shp_ymin_low <- 48
+shp_ymax_low <- 52
+
+bbox_low <- st_bbox(c(xmin = shp_xmin_low, ymin = shp_ymin_low, xmax = shp_xmax_low, ymax = shp_ymax_low))
+
+bbox_low_sf <- st_as_sfc(bbox_low)
+
+VI_base_layer_sf_subset <- st_crop(VI_base_layer_sf, bbox_low_sf)
+#plot(VI_base_layer_sf_subset)
+```
+
+```{r Loading in the shapefiles to do the fetch calculations, include=FALSE}
+#This is a high resolution shape file from Hakai. This code loads in the shape
+#file and saves it as the proper shape file object
+VI_base_layer_hi_res <- read_sf(dsn = here("./01_raw_data/hakai_zip"),
+                                stringsAsFactors = F)
+
+VI_base_layer_hi_res_sf <- st_as_sf(VI_base_layer_hi_res)
+
+#specifying the projection to use for the sf
+st_crs(VI_base_layer_hi_res_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+
+
+#This subsets the shape file to only be of Barkley Sound to make plotting more
+#efficient
+
+#This makes coordinate limits to subset the shapefile
+shp_xmin <- -125.4
+shp_xmax <- -124.95
+shp_ymin <- 48.7
+shp_ymax <- 49.0
+
+#This makes a bounding of the coordinates that I just made
+bbox <- st_bbox(c(xmin = shp_xmin, ymin = shp_ymin, xmax = shp_xmax, ymax = shp_ymax))
+
+#This converts the boundary box to an SFC object
+bbox_sf <- st_as_sfc(bbox)
+
+#This crops the shape file to the area of the bounding box
+VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
+#plot(VI_base_layer_hi_res_sf_subset)
+```
+
+### Loading in the shapefiles for the protected areas
+
+In order to show the protected areas within Barkley Sound I used Google Earth to make kml files with polygons of the protected areas.
+
+```{r loading in the RCA polygon}
+#st_read loads in the kml file and stores it as a polygon
+broken_group_RCA <- st_read(here("./01_raw_data/Broken_group_RCA.kml"))
+```
+
+```{r Loading in the Numukamis area}
+numukamis_area <- st_read(here("./01_raw_data/Numukamis_closed_area.kml"))
+```
+
+```{r Loading in the Baeria rocks}
+baeria_rocks_er <- st_read(here("./01_raw_data/baeria_rocks.kml"))
+```
+
+### Loading in the flight track for the DFO surveys
+
+I also traced the DFO flight path used for the DFO flyover surveys in Barkley Sound using Google Earth and saved it as a kml file.
+
+```{r Loading in the DFO flight track for Barkley Sound}
+#This loads in the flight path so that it can be put on the plot.
+dfo_flight_track <- st_read(here("./01_raw_data/dfo_new_flight_path.kml"))
+```
+
+
+###Shifting a couple of the sites to make it clearer
+
+In order to not have a bunch of the sites overlapping each other when plotting maps I shifted some of the points slightly.
+
+```{r Shifting some sites}
+overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
+  #These lines of code change the lat or long of the specified site to the given value
+ mutate(longitude = if_else(site_code == "BMSC11", -125.153, longitude))%>%
+  mutate(latitude = if_else(site_code == "BMSC5", 48.82333, latitude))%>%
+  mutate(latitude = if_else(site_code == "BMSC9", 48.83179, latitude))%>%
+  mutate(longitude = if_else(site_code == "BMSC9", -125.1490, longitude))
+```
+
+
+## Figure 1: Overall site map
+
+```{r Making the inset map}
+#This makes a map of Vancouver Island
+(van_isl_map <- ggplot(VI_base_layer_sf_subset) +
+   #allows visualization of sf objects
+  geom_sf() +
+   #Sets limits for the plot
+  coord_sf(ylim = c(48.3, 50.8), xlim = c(-128.2, -123.2)) +
+  theme.figure() +
+   #Makes a red rectangle around Barkley Sound
+  geom_rect(xmin = long_min, xmax = long_max, ymin = lat_min, ymax = lat_max,
+            color = "red", fill = NA, linewidth = 1) +
+  labs(x = "Longitude", y = "Latitude")+
+   theme(axis.text = element_blank(),
+         axis.title = element_blank(),
+         axis.ticks = element_blank()))
+```
+
+
+```{r Overall site map with the site locations}
+(overall_site_map <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+   #The lines below plot the pl=olygons of the different protected areas within
+   #the sound
+     geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+   #This adds in the points of the survey sites, shifted slightly to be not 
+   #overlapping
+     geom_point(overall_rls_data_final_minor_shifted, 
+              mapping = aes(x = longitude, y = latitude, fill = protection_status,
+                            shape = region), size = 3)+
+   #This specifies the different shapes to be used to differentiate
+   #between the different regions
+   scale_shape_manual(values = c(24, 21, 22, 23))+
+   #Specifies the colours for unprotected and protected sites
+   scale_fill_manual(values = c("#F46864", "#1CB8BC"))+
+       coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.04)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Protection\nStatus") +
+  theme.figure() +
+  scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+ # scale_y_continuous(breaks = c(48.80, 48.85, 48.90, 48.95, 49.00))+
+  #Adds in an arrow indicating north
+   annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+   #adds in a scale bar
+  annotation_scale(location = "br", text_cex = 1.3)+
+    theme(legend.position = "inside",
+      legend.position.inside = c(0.84, 0.2),
+         axis.text.y = element_text(angle = 45),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 14),
+      legend.margin = margin(0.3, 0.3, 0.3, 0.3)))
+```
+
+
+```{r Making the site map with the van isl inset, fig.cap= Figure 1. Locations of Reef Life Survey study sites (n = 26) within Barkley Sound, BC, Canada, which were sampled in April and May of 2024. The colours indicate the protection-from-fishing status of each site. Some sites have been shifted slightly to prevent overlap. Region classifications are indicated by the shapes with the region codes corresponding to: BG = Broken Group, DIEC = Deep Imperial Eagle Channel, DGB = Deer Group/Bamfield, and NMB = Numukamis Bay. Areas protected from fishing are shown with blue shade: farthest west = Broken Group Rockfish Conservation Area, central north = Baeria Rocks Ecological Reserve, farthest east = Numukamis Bay Finfish Closure Area. Inset is a map of Vancouver Island illustrating the location of Barkley Sound (red square).}
+(site_map_w_inset <- ggdraw(overall_site_map) +
+  draw_plot(van_isl_map, x = 0.1, y = 0.15, width = 0.5, height = 0.3))
+```
+
+This was the rough version of the plot and then I saved it as a pdf and used inkscape to fine tune the locations of the legends and inset.
+
+```{r Saving the site map}
+ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
+       path = here("./04_plots/manuscript_figures
+                   "), width = 165, height = 130, units = "mm")
+```
+
+## Figure N: DFO Boating impacts
+
+
