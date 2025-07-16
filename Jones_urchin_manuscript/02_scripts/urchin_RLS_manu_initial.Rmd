@@ -192,6 +192,7 @@ overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182,
 
 overall_rls_data_clean$site_code <- as.factor(overall_rls_data_clean$site_code)
 overall_rls_data_clean$site_name <- as.factor(overall_rls_data_clean$site_name)
+overall_rls_data_clean$protection_status <- as.factor(overall_rls_data_clean$protection_status)
 ```
 
 ## Making some specific columns for modelling
@@ -218,7 +219,7 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
 ```
 
 ```{r}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_rockfish))+
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_urchins))+
   geom_boxplot()
 ```
 
@@ -537,6 +538,13 @@ overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
 overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 190, seq(3, 189, by = 1))]
 ```
 
+## Adding columns for binning the fishing boat impacts
+
+```{r Adding columns for binning the fishing boat impacts}
+
+```
+
+
 
 ## Set up for doing spatial analyses on the data
 
@@ -828,7 +836,7 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
    #between the different regions
    scale_shape_manual(values = c(24, 21, 22, 23))+
    #Specifies the colours for unprotected and protected sites
-   scale_fill_manual(values = c("#F46864", "#1CB8BC"))+
+   scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
        coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.04)) +
   labs(x = "Longitude", y = "Latitude", shape = "Region",
@@ -870,73 +878,80 @@ ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
 
 In order to visualize how impacted each RLS site in Barkley Sound is by recreational fishing boats I am making a map of the sound with the impacts of each site represented by colour and size of point. The colours, and sizes will be binned into three or four categories so for ease of viewing.
 
-```{r Plot of the impacts of recreational fishing boats around RLS sites}
-(rec_boat_impacts <- ggplot()+
-    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
-   #This plots the DFO plane flight path
-   #This plots the 1.5km radii around each RLS site
-    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+I will try making this plot with both mean number of fishing boats and median number of fishing boats. This first one is for the mean number of boats. Because there are 3 different distances that we have used I will also need to make 3 plots for each value. Then I will try with an averaged value across the three distances if that makes sense to do.
+
+```{r Plot of the impacts of recreational fishing boats around RLS sites 1km}
+#This sets the size breaks for the legend of the plot
+size_breaks_1km <- c(0, 30, 60, 100)
+
+(rec_boat_impacts_1km_mean <- ggplot()+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", 
+           fill = "lightgrey")+
    #this plots the RLS sites
-    geom_point(env_mod_data_hon, 
-              mapping = aes(x = longitude, y = latitude),
-              shape = 21, size = 3, colour = "black")+
+    geom_point(overall_rls_data_final_minor_shifted, 
+              mapping = aes(x = longitude, y = latitude, 
+                            size = mean_rec_boat_counts_1km, 
+                            fill = protection_status), shape = 21)+
+#This is used to adjust the size of the points to be scaled based on the values
+    #in the mean rec boat column
+     scale_size_continuous(
+    range = c(2, 7),
+    breaks = size_breaks_1km,
+    #this sets the limits so that the scales can be the same overall between 
+    #all of the different plots
+    limits = c(0, 120),
+    #This code adds the labels from the size breaks object and adds a plus sign
+    #to the biggest label indicating there can be larger values
+    labels = c(scales::comma(size_breaks_1km[-length(size_breaks_1km)]),
+               paste0(scales::comma(size_breaks_1km[length(size_breaks_1km)]), "+")),
+      name = "Mean Rec Boat\nCounts (1 km)")+
+ scale_fill_manual(values = c("#F46864", "#1CB8BC"))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
-  labs(x = "Longitude", y = "Latitude") +
-  theme.figure.report() +
+  labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
+  theme.figure() +
    theme(axis.text.y = element_text(angle = 45))+
  scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   annotation_north_arrow(
-    location = "tr",
+   location = "tr",
     which_north = "true",
     style = north_arrow_fancy_orienteering
-  ) +
+  )+
   annotation_scale(location = "br", text_cex = 1.3))
 ```
 
+```{r Plot of the impacts of recreational fishing boats around RLS sites 1.5km}
+size_breaks_1.5km <- c(0, 30, 60, 100)
 
-
-
-
-
-
-For this plot we used 2023 and 1.5 km radii as examples of the data we saw for the rec boat counts
-
-```{r total rec boats within 1.5 km, fig.cap=Figure 3. Example of the raw data from DFO flyover surveys (June 1–September 30, 2023) indicating the locations of recreational boats fishing (black dots) with 1.5 km radii (red-filled circles) around each Reef Life Survey site (open black dots) in Barkley Sound, BC, Canada. Subtidal surveys were conducted at each site in April and May of 2024. The DFO surveys sometimes grouped boats that were close together as one point, so some points indicate multiple boats, but this has been omitted for ease of viewing. The flight path taken by DFO surveyors is shown (dashed blue line) with arrows showing the direction of flight. DFO surveys were completed in the summers of 2021-23. The mean numbers of recreational boats fishing within 1.0, 1.5, and 2.0 km radii per year were calculated to compare fishing activity between protected and unprotected sites.}
-(total_rec_boats_map_2023_test <- ggplot()+
-    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
-   #This plots the DFO plane flight path
-   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
-  geom_point(data = rec_boats_fishing2023, 
-             mapping = aes(x = Longitude, y = Latitude),
-             size = 0.8, fill = "#070707")+
-   #This plots the 1.5km radii around each RLS site
-    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+(rec_boat_impacts_1.5km_mean <- ggplot()+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", 
+           fill = "lightgrey")+
    #this plots the RLS sites
-    geom_point(env_mod_data_hon, 
-              mapping = aes(x = longitude, y = latitude),
-              shape = 21, size = 3, colour = "black")+
+    geom_point(overall_rls_data_final_minor_shifted, 
+              mapping = aes(x = longitude, y = latitude, 
+                            size = mean_rec_boat_counts_1.5km, 
+                            fill = protection_status), shape = 21)+
+     scale_size_continuous(
+    range = c(2, 7),
+    breaks = size_breaks_1.5km,
+    limits = c(0, 120),
+    labels = c(scales::comma(size_breaks_1.5km[-length(size_breaks_1.5km)]),
+               paste0(scales::comma(size_breaks_1.5km[length(size_breaks_1.5km)]), "+")),
+      name = "Mean Rec Boat\nCounts (1.5 km)")+
+ scale_fill_manual(values = c("#F46864", "#1CB8BC"))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
-  labs(x = "Longitude", y = "Latitude") +
-  theme.figure.report() +
+  labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
+  theme.figure() +
    theme(axis.text.y = element_text(angle = 45))+
  scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   annotation_north_arrow(
-    location = "tr",
+   location = "tr",
     which_north = "true",
     style = north_arrow_fancy_orienteering
-  ) +
+  )+
   annotation_scale(location = "br", text_cex = 1.3))
 ```
-
-A legend was added and the flight path line styling was edited using inkscape.
-
-```{r Saving the rec boats plot with dfo flight track}
-ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
-       path = here("./04_plots/report_figures"), width = 160, height = 120, units = "mm")
-```
-
 
 
 # Appendix stuff
@@ -956,13 +971,13 @@ For this plot we used 2023 and 1.5 km radii as examples of the data we saw for t
    #This plots the 1.5km radii around each RLS site
     geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
    #this plots the RLS sites
-    geom_point(env_mod_data_hon, 
+    geom_point(overall_rls_data_final, 
               mapping = aes(x = longitude, y = latitude),
               shape = 21, size = 3, colour = "black")+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude") +
-  theme.figure.report() +
+  theme.figure() +
    theme(axis.text.y = element_text(angle = 45))+
  scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   annotation_north_arrow(
@@ -977,5 +992,5 @@ A legend was added and the flight path line styling was edited using inkscape.
 
 ```{r Saving the rec boats plot with dfo flight track}
 ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
-       path = here("./04_plots/report_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
 ```
