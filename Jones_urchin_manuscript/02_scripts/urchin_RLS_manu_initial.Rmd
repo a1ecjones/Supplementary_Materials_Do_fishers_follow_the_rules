@@ -795,7 +795,8 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
  mutate(longitude = if_else(site_code == "BMSC11", -125.153, longitude))%>%
   mutate(latitude = if_else(site_code == "BMSC5", 48.82333, latitude))%>%
   mutate(latitude = if_else(site_code == "BMSC9", 48.83179, latitude))%>%
-  mutate(longitude = if_else(site_code == "BMSC9", -125.1490, longitude))
+  mutate(longitude = if_else(site_code == "BMSC9", -125.1490, longitude))%>%
+  mutate(longitude = if_else(site_code == "BMSC7", -125.16, longitude))
 ```
 
 
@@ -891,7 +892,8 @@ size_breaks_1km <- c(0, 30, 60, 100)
     geom_point(overall_rls_data_final_minor_shifted, 
               mapping = aes(x = longitude, y = latitude, 
                             size = mean_rec_boat_counts_1km, 
-                            fill = protection_status), shape = 21)+
+                            fill = protection_status),
+                            shape = 21)+
 #This is used to adjust the size of the points to be scaled based on the values
     #in the mean rec boat column
      scale_size_continuous(
@@ -899,13 +901,11 @@ size_breaks_1km <- c(0, 30, 60, 100)
     breaks = size_breaks_1km,
     #this sets the limits so that the scales can be the same overall between 
     #all of the different plots
-    limits = c(0, 120),
-    #This code adds the labels from the size breaks object and adds a plus sign
-    #to the biggest label indicating there can be larger values
-    labels = c(scales::comma(size_breaks_1km[-length(size_breaks_1km)]),
-               paste0(scales::comma(size_breaks_1km[length(size_breaks_1km)]), "+")),
-      name = "Mean Rec Boat\nCounts (1 km)")+
- scale_fill_manual(values = c("#F46864", "#1CB8BC"))+
+    limits = c(0, 160),
+    #This code adds the labels from the size breaks object
+    labels = size_breaks_1km,
+      name = "Mean # of Rec Boats\nFishing (1 km)")+
+ scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
@@ -918,6 +918,12 @@ size_breaks_1km <- c(0, 30, 60, 100)
     style = north_arrow_fancy_orienteering
   )+
   annotation_scale(location = "br", text_cex = 1.3))
+```
+
+```{r Saving the rec boat impacts figure 1km map}
+ggsave("rec_boat_impacts_1km_mean.pdf", plot = rec_boat_impacts_1km_mean,
+       path = here("./04_plots/manuscript_figures"),
+       width = 165, height = 130, units = "mm")
 ```
 
 ```{r Plot of the impacts of recreational fishing boats around RLS sites 1.5km}
@@ -934,11 +940,10 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
      scale_size_continuous(
     range = c(2, 7),
     breaks = size_breaks_1.5km,
-    limits = c(0, 120),
-    labels = c(scales::comma(size_breaks_1.5km[-length(size_breaks_1.5km)]),
-               paste0(scales::comma(size_breaks_1.5km[length(size_breaks_1.5km)]), "+")),
-      name = "Mean Rec Boat\nCounts (1.5 km)")+
- scale_fill_manual(values = c("#F46864", "#1CB8BC"))+
+    limits = c(0, 160),
+    labels = size_breaks_1.5km,
+      name = "Mean # of Rec Boats\nFishing (1.5 km)")+
+ scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
@@ -953,6 +958,49 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
   annotation_scale(location = "br", text_cex = 1.3))
 ```
 
+```{r Saving the rec boat impacts figure 1.5km map}
+ggsave("rec_boat_impacts_1.5km_mean.pdf", plot = rec_boat_impacts_1.5km_mean,
+       path = here("./04_plots/manuscript_figures"),
+       width = 165, height = 130, units = "mm")
+```
+
+```{r Plot of the impacts of recreational fishing boats around RLS sites 2km}
+size_breaks_2km <- c(0, 30, 60, 100)
+
+(rec_boat_impacts_2km_mean <- ggplot()+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", 
+           fill = "lightgrey")+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final_minor_shifted, 
+              mapping = aes(x = longitude, y = latitude, 
+                            size = mean_rec_boat_counts_2km, 
+                            fill = protection_status), shape = 21)+
+     scale_size_continuous(
+    range = c(2, 7),
+    breaks = size_breaks_2km,
+    limits = c(0, 160),
+    labels = size_breaks_2km,
+      name = "Mean # of Rec Boats\nFishing (2 km)")+
+ scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+   location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  )+
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+```{r Saving the rec boat impacts figure 2km map}
+ggsave("rec_boat_impacts_2km_mean.pdf", plot = rec_boat_impacts_2km_mean,
+       path = here("./04_plots/manuscript_figures"),
+       width = 165, height = 130, units = "mm")
+```
 
 # Appendix stuff
 
