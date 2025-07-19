@@ -18,6 +18,7 @@ library(sf)
 library(sdmTMB)
 library(ggspatial)
 library(cowplot)
+
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -905,7 +906,7 @@ size_breaks_1km <- c(0, 30, 60, 100)
     #This code adds the labels from the size breaks object
     labels = size_breaks_1km,
       name = "Mean # of Rec Boats\nFishing (1 km)")+
- scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
+ scale_fill_manual(values = c("black", "white"))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
@@ -963,6 +964,40 @@ ggsave("rec_boat_impacts_1.5km_mean.pdf", plot = rec_boat_impacts_1.5km_mean,
        path = here("./04_plots/manuscript_figures"),
        width = 165, height = 130, units = "mm")
 ```
+
+
+Here is an alternate way of representing the number of rec boats fishing with colours instead
+
+```{r Plot of the impacts of recreational fishing boats around RLS sites 1.5km with colours, include=FALSE}
+size_breaks_1.5km <- c(0, 30, 60, 100)
+
+(rec_boat_impacts_1.5km_mean_colour <- ggplot()+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", 
+           fill = "lightgrey")+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final_minor_shifted, 
+              mapping = aes(x = longitude, y = latitude, 
+                            fill = mean_rec_boat_counts_1.5km, 
+                            shape = protection_status))+
+ scale_fill_viridis_c()+
+   scale_shape_manual(values = c(24, 21))+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Protection\nStatus",
+       fill = "Mean # of Rec Boats\nFishing (1.5)") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+   location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  )+
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+
+This is a lot less clear of a way to show the data so I will likely stick with the different sized circles.
 
 ```{r Plot of the impacts of recreational fishing boats around RLS sites 2km}
 size_breaks_2km <- c(0, 30, 60, 100)
