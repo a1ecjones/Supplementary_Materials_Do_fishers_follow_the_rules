@@ -539,134 +539,6 @@ overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
 overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 190, seq(3, 189, by = 1))]
 ```
 
-## Adding columns for binning the fishing boat impacts
-
-```{r Adding columns for binning the fishing boat impacts}
-
-```
-
-
-
-## Set up for doing spatial analyses on the data
-
-### Adding columns of projected coordinates for the sites
-
-```{r Adding a column of projected locations for the sites}
-#changing the data frame to have the coordinates as a geometry type in WGS84
-overall_rls_data_final_geo <- st_as_sf(overall_rls_data_final, 
-                                       coords = c("longitude", "latitude"),
-                                       crs = 4326)
-#converting the coordinates to a projection from around Vancouver Island
-overall_rls_data_final_proj <- st_transform(overall_rls_data_final_geo, crs = 32610)
-
-#Extracting the projected coordinates
-coords_utm <- st_coordinates(overall_rls_data_final_proj)
-
-#adding the projected coordinates to the main data frame
-overall_rls_data_final$easting <- coords_utm[,1]
-overall_rls_data_final$northing <- coords_utm[,2]
-
-#adding columns with the data in km
-overall_rls_data_final$easting_km <- overall_rls_data_final$easting / 1000
-overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
-```
-
-### Making a mesh of the sites
-
-```{r Creating a mesh of the RLS sites}
-mesh_RLS <- make_mesh(overall_rls_data_final, xy_cols = c("easting_km", "northing_km"),
-                      cutoff = 1)
-
-plot(mesh_RLS)
-```
-
-
-# Initial modelling
-
-I will be using the sdmTMB package to create models looking at the abundances/densities of urchins, fish, and other invertebrates at the RLS sites within Barkley Sound. The models will be based on the protection status of the survey sites as the predictor variable.
-
-## Urchin Modelling
-
-I will be starting with a model looking at the number of urchins overall at the different sites, and then I will make specific models for each of the three main urchin species. 
-
-I will try with a few different likely distributional families and then see which ones fits the data the best.
-
-### Tweedie
-
-```{r Urchin model}
-urch_mod <- sdmTMB(total_urchins ~ protection_status + depth + total_fish,
-                   data = overall_rls_data_final,
-                   mesh = mesh_RLS,
-                   family = tweedie(),
-                   spatial = "on",
-                   spatiotemporal = "off")
-urch_mod
-
-sanity(urch_mod)
-
-tidy(urch_mod, conf.int = TRUE)
-
-tidy(urch_mod, "ran_pars", conf.int = TRUE)
-
-
-predictions<-predict(urch_mod, newdata=overall_rls_data_final)
-
-ggplot(data=predictions, aes(x=easting_km, y = northing_km, colour = omega_s))+
-  geom_point()
-
-#visreg::visreg(urch_mod, "protection_status")
-
-summary(urch_mod)
-```
-
-```{r Inspecting fit of urchin model}
-set.seed(123)
-overall_rls_data_final$resids <- simulate(urch_mod, nsim = 100, type = "mle-mvn") |>
-  dharma_residuals(urch_mod)
-```
-
-```{r Plotting spatial residuals}
-ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids$observed))+
-  scale_colour_gradient2()+
-  geom_point()+
-  facet_wrap(~year)+
-  coord_fixed()
-```
-
-### Poisson
-
-```{r Urchin model}
-urch_mod_poi <- sdmTMB(total_urchins ~ protection_status,
-                   data = overall_rls_data_final,
-                   mesh = mesh_RLS,
-                   time = "year",
-                   family = poisson(link = "log"),
-                   spatial = "off",
-                   spatiotemporal = "off")
-urch_mod_poi
-
-sanity(urch_mod_poi)
-
-tidy(urch_mod_poi, conf.int = TRUE)
-
-tidy(urch_mod_poi, "ran_pars", conf.int = TRUE)
-```
-
-```{r Inspecting fit of urchin model}
-set.seed(123)
-overall_rls_data_final$resids_poi <- simulate(urch_mod_poi, nsim = 100, type = "mle-mvn") |>
-  dharma_residuals(urch_mod_poi)
-```
-
-```{r Plotting spatial residuals}
-ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids_poi$observed))+
-  scale_colour_gradient2()+
-  geom_point()+
-  facet_wrap(~year)+
-  coord_fixed()
-```
-
-
 # Making some plots
 
 ## Making a theme for all subsequent figures
@@ -826,21 +698,23 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
     geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
    #The lines below plot the pl=olygons of the different protected areas within
    #the sound
-     geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
    geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
    geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
    #This adds in the points of the survey sites, shifted slightly to be not 
    #overlapping
      geom_point(overall_rls_data_final_minor_shifted, 
               mapping = aes(x = longitude, y = latitude, fill = protection_status,
-                            shape = region), size = 3)+
+                            shape = region), size = 3,
+              colour = "black")+
    #This specifies the different shapes to be used to differentiate
    #between the different regions
+   scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
    scale_shape_manual(values = c(24, 21, 22, 23))+
    #Specifies the colours for unprotected and protected sites
-   scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
+  # scale_fill_manual(values = c("black", "white"))+
        coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
-           ylim = c(lat_min + 0.01, lat_max - 0.04)) +
+           ylim = c(lat_min + 0.01, lat_max - 0.04))+
   labs(x = "Longitude", y = "Latitude", shape = "Region",
        fill = "Protection\nStatus") +
   theme.figure() +
@@ -854,6 +728,10 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
   ) +
    #adds in a scale bar
   annotation_scale(location = "br", text_cex = 1.3)+
+   guides(
+  fill = guide_legend(override.aes = list(shape = 21)),
+  shape = guide_legend(override.aes = list(fill = "white"))
+)+
     theme(legend.position = "inside",
       legend.position.inside = c(0.84, 0.2),
          axis.text.y = element_text(angle = 45),
@@ -878,7 +756,7 @@ ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
 
 ## Figure N: DFO Boating impacts
 
-In order to visualize how impacted each RLS site in Barkley Sound is by recreational fishing boats I am making a map of the sound with the impacts of each site represented by colour and size of point. The colours, and sizes will be binned into three or four categories so for ease of viewing.
+In order to visualize how impacted each RLS site in Barkley Sound is by recreational fishing boats I am making a map of the sound with the impacts of each site represented by colour and size of point.
 
 I will try making this plot with both mean number of fishing boats and median number of fishing boats. This first one is for the mean number of boats. Because there are 3 different distances that we have used I will also need to make 3 plots for each value. Then I will try with an averaged value across the three distances if that makes sense to do.
 
@@ -944,7 +822,7 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
     limits = c(0, 160),
     labels = size_breaks_1.5km,
       name = "Mean # of Rec Boats\nFishing (1.5 km)")+
- scale_fill_manual(values = c("#1CB8BC", "#F46864"))+
+ scale_fill_manual(values = c("black", "white"))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
@@ -956,7 +834,13 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
     which_north = "true",
     style = north_arrow_fancy_orienteering
   )+
-  annotation_scale(location = "br", text_cex = 1.3))
+  annotation_scale(location = "br", text_cex = 1.3)+
+     theme(legend.position = "inside",
+      legend.position.inside = c(0.84, 0.2),
+         axis.text.y = element_text(angle = 45),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 14),
+      legend.margin = margin(0.3, 0.3, 0.3, 0.3)))
 ```
 
 ```{r Saving the rec boat impacts figure 1.5km map}
@@ -968,7 +852,7 @@ ggsave("rec_boat_impacts_1.5km_mean.pdf", plot = rec_boat_impacts_1.5km_mean,
 
 Here is an alternate way of representing the number of rec boats fishing with colours instead
 
-```{r Plot of the impacts of recreational fishing boats around RLS sites 1.5km with colours, include=FALSE}
+```{r Plot of the impacts of recreational fishing boats around RLS sites 1.5km with colours}
 size_breaks_1.5km <- c(0, 30, 60, 100)
 
 (rec_boat_impacts_1.5km_mean_colour <- ggplot()+
@@ -978,13 +862,15 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
     geom_point(overall_rls_data_final_minor_shifted, 
               mapping = aes(x = longitude, y = latitude, 
                             fill = mean_rec_boat_counts_1.5km, 
-                            shape = protection_status))+
- scale_fill_viridis_c()+
+                            shape = protection_status),
+              size = 3)+
+ scale_fill_gradient(low = "blue",
+                     high = "red")+
    scale_shape_manual(values = c(24, 21))+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude", shape = "Protection\nStatus",
-       fill = "Mean # of Rec Boats\nFishing (1.5)") +
+       fill = "Mean # of Rec Boats\nFishing (1.5 km)") +
   theme.figure() +
    theme(axis.text.y = element_text(angle = 45))+
  scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
@@ -998,6 +884,13 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
 
 
 This is a lot less clear of a way to show the data so I will likely stick with the different sized circles.
+
+```{r Saving the rec boat impacts figure 1.5km map}
+ggsave("rec_boat_impacts_1.5km_mean_colour.pdf", plot = rec_boat_impacts_1.5km_mean_colour,
+       path = here("./04_plots/manuscript_figures"),
+       width = 165, height = 130, units = "mm")
+```
+
 
 ```{r Plot of the impacts of recreational fishing boats around RLS sites 2km}
 size_breaks_2km <- c(0, 30, 60, 100)
@@ -1076,4 +969,124 @@ A legend was added and the flight path line styling was edited using inkscape.
 ```{r Saving the rec boats plot with dfo flight track}
 ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
        path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+```
+
+
+## Set up for doing spatial analyses on the data
+
+### Adding columns of projected coordinates for the sites
+
+```{r Adding a column of projected locations for the sites}
+#changing the data frame to have the coordinates as a geometry type in WGS84
+overall_rls_data_final_geo <- st_as_sf(overall_rls_data_final, 
+                                       coords = c("longitude", "latitude"),
+                                       crs = 4326)
+#converting the coordinates to a projection from around Vancouver Island
+overall_rls_data_final_proj <- st_transform(overall_rls_data_final_geo, crs = 32610)
+
+#Extracting the projected coordinates
+coords_utm <- st_coordinates(overall_rls_data_final_proj)
+
+#adding the projected coordinates to the main data frame
+overall_rls_data_final$easting <- coords_utm[,1]
+overall_rls_data_final$northing <- coords_utm[,2]
+
+#adding columns with the data in km
+overall_rls_data_final$easting_km <- overall_rls_data_final$easting / 1000
+overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
+```
+
+### Making a mesh of the sites
+
+```{r Creating a mesh of the RLS sites}
+mesh_RLS <- make_mesh(overall_rls_data_final, xy_cols = c("easting_km", "northing_km"),
+                      cutoff = 1)
+
+plot(mesh_RLS)
+```
+
+
+# Initial modelling
+
+I will be using the sdmTMB package to create models looking at the abundances/densities of urchins, fish, and other invertebrates at the RLS sites within Barkley Sound. The models will be based on the protection status of the survey sites as the predictor variable.
+
+## Urchin Modelling
+
+I will be starting with a model looking at the number of urchins overall at the different sites, and then I will make specific models for each of the three main urchin species. 
+
+I will try with a few different likely distributional families and then see which one fits the data the best.
+
+### Tweedie
+
+```{r Urchin model}
+urch_mod <- sdmTMB(total_urchins ~ protection_status,
+                   data = overall_rls_data_final,
+                   mesh = mesh_RLS,
+                   family = tweedie(link = "log"),
+                   spatial = "on",
+                   spatiotemporal = "off")
+urch_mod
+
+sanity(urch_mod)
+
+tidy(urch_mod, conf.int = TRUE)
+
+tidy(urch_mod, "ran_pars", conf.int = TRUE)
+
+
+predictions<-predict(urch_mod, newdata=overall_rls_data_final)
+
+ggplot(data=predictions, aes(x=easting_km, y = northing_km, colour = omega_s))+
+  geom_point()
+
+#visreg::visreg(urch_mod, "protection_status")
+
+summary(urch_mod)
+```
+
+```{r Inspecting fit of urchin model}
+set.seed(123)
+overall_rls_data_final$resids <- simulate(urch_mod, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(urch_mod)
+```
+
+```{r Plotting spatial residuals}
+ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids$observed))+
+  scale_colour_gradient2()+
+  geom_point()+
+  facet_wrap(~year)+
+  coord_fixed()
+```
+
+### Poisson
+
+```{r Urchin model}
+urch_mod_poi <- sdmTMB(total_urchins ~ protection_status,
+                   data = overall_rls_data_final,
+                   mesh = mesh_RLS,
+                   time = "year",
+                   family = poisson(link = "log"),
+                   spatial = "off",
+                   spatiotemporal = "off")
+urch_mod_poi
+
+sanity(urch_mod_poi)
+
+tidy(urch_mod_poi, conf.int = TRUE)
+
+tidy(urch_mod_poi, "ran_pars", conf.int = TRUE)
+```
+
+```{r Inspecting fit of urchin model}
+set.seed(123)
+overall_rls_data_final$resids_poi <- simulate(urch_mod_poi, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(urch_mod_poi)
+```
+
+```{r Plotting spatial residuals}
+ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids_poi$observed))+
+  scale_colour_gradient2()+
+  geom_point()+
+  facet_wrap(~year)+
+  coord_fixed()
 ```
