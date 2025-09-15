@@ -171,13 +171,14 @@ overall_rls_data_raw_wide <- overall_rls_data_raw_wide%>%
 ```
 
 
+I have decided to cut the three sites BMSC 31, 32, 33 as they were only sampled in 2023 and none of the other years. Additionally I do not have the exact lat and longs for them.
 ```{r Cutting the other sites and adding the information to do some modelling}
 #Cutting the other sites
+
 overall_rls_data_clean <- overall_rls_data_raw_wide%>%
   filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
                           "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
-                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3",
-                          "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
                           "BMSC8", "BMSC9"))%>%
 #Adding the protection status to the dataset
 mutate(protection_status = case_when(
@@ -216,6 +217,144 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
            Sebastes_nebulosus + Sebastes_pinniger + Sebastes_spp. + Synchirus_gilli + Zalophus_californianus,
          total_rockfish = Sebastes_spp. + Sebastes_pinniger + Sebastes_caurinus + Sebastes_maliger + Sebastes_melanops +
            Sebastes_nebulosus + Sebastes_flavidus)
+```
+
+
+## Making a DF with fish sizes overall
+
+```{r Expanding the long format data so that each individual fish has its own row}
+overall_rls_data_expanded <- overall_rls_data_raw_lat_long%>%
+  filter(phylum == "Chordata")%>%
+  filter(class != "Mammalia")%>%
+  #This replicates each row by the number of counts of each fish in total
+  uncount(total)
+```
+
+```{r Cleaning up the data and adding the necessary variables}
+#Removing unnecessary columns
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude", "geom"))
+
+
+#Cutting the other sites
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+overall_rls_data_expanded$site_code <- as.factor(overall_rls_data_expanded$site_code)
+overall_rls_data_expanded$site_name <- as.factor(overall_rls_data_expanded$site_name)
+overall_rls_data_expanded$protection_status <- as.factor(overall_rls_data_expanded$protection_status)
+
+
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_expanded$year <- format(overall_rls_data_expanded$survey_date, "%Y")
+
+overall_rls_data_expanded$year <- as.numeric(overall_rls_data_expanded$year)
+
+#Adding columns for site kelp characteristics
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))
+
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+```
+
+
+
+```{r Pivoting fish data to wide form}
+overall_rls_data_sizes_raw <- overall_rls_data_raw_lat_long%>%
+   select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude"))%>%
+  filter(phylum == "Chordata")%>%
+   group_by(site_code, site_name, latitude, longitude, survey_date, depth, size_class)%>%
+  summarise(site_count_by_size = sum(total))
+
+overall_rls_data_sizes_raw$size_class <- as.factor(overall_rls_data_sizes_raw$size_class)
+
+overall_rls_data_sizes_raw_wide <- overall_rls_data_sizes_raw%>%
+  pivot_wider(
+    names_from = size_class,
+    values_from = site_count_by_size,
+    values_fill = 0
+  )
+```
+
+```{r Cutting the unnecessary sites}
+#Cutting the other sites
+
+overall_rls_data_clean_sizes <- overall_rls_data_sizes_raw_wide%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+overall_rls_data_clean_sizes$site_code <- as.factor(overall_rls_data_clean_sizes$site_code)
+overall_rls_data_clean_sizes$site_name <- as.factor(overall_rls_data_clean_sizes$site_name)
+overall_rls_data_clean_sizes$protection_status <- as.factor(overall_rls_data_clean_sizes$protection_status)
+```
+
+```{r Adding a column for year to the sizes df}
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_clean_sizes$year <- format(overall_rls_data_clean_sizes$survey_date, "%Y")
+
+#reordering the df
+overall_rls_data_clean_sizes <- overall_rls_data_clean_sizes[,c(seq(1, 5, by = 1), 27,
+                                                    seq(6, 26, by = 1))]
+
+overall_rls_data_clean_sizes$year <- as.numeric(overall_rls_data_clean_sizes$year)
+```
+
+```{r Adding a column for site kelp characteristics to the size df}
+overall_rls_data_clean_sizes <- overall_rls_data_clean_sizes%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))
+
+#overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 191, seq(3, 190, by = 1))]
+```
+
+```{r Combining the groups into either presence or absence of macroalgae for the size df}
+overall_rls_data_clean_sizes <- overall_rls_data_clean_sizes%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+
+#overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 192, seq(4, 191, by = 1))]
 ```
 
 
@@ -585,11 +724,11 @@ overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
   mutate(region = case_when(
     site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC19", "BMSC2",
                      "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC25", "BMSC3",
-                     "BMSC4", "BMSC5", "BMSC9", "BMSC31", "BMSC33") ~ "Deer group/Bamfield",
+                     "BMSC4", "BMSC5", "BMSC9") ~ "Deer group/Bamfield",
     site_code %in% c("BMSC13", "BMSC14", "BMSC15", "BMSC16", "BMSC17", 
                      "BMSC18") ~ "Broken Group",
     site_code %in% c("BMSC24", "BMSC6", "BMSC7", "BMSC8") ~ "Deep Imperial Eagle Channel",
-    site_code %in% c("BMSC26", "BMSC27", "BMSC32") ~ "Sarita"
+    site_code %in% c("BMSC26", "BMSC27") ~ "Sarita"
   ))
 
 overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 190, seq(3, 189, by = 1))]
@@ -605,14 +744,29 @@ overall_rls_data_final <- overall_rls_data_final%>%
     site_code %in% c("BMSC10") ~ "Prior forest",
     site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
     site_code %in% c("BMSC1") ~ "Understory",
-    TRUE ~ "Barren"
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
   ))
+
+overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 191, seq(3, 190, by = 1))]
+```
+
+```{r Combining the groups into either presence or absence of macroalgae}
+overall_rls_data_final <- overall_rls_data_final%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+
+overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 192, seq(4, 191, by = 1))]
 ```
 
 
+
 ```{r}
-ggplot(overall_rls_data_final, aes(x = kelp, y = Pomaulax_gibberosus))+
-  geom_jitter(height = 0)
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Mesocentrotus_franciscanus))+
+  #geom_jitter(height = 0)+
+  geom_boxplot()
 ```
 
 
@@ -1072,8 +1226,116 @@ plot(mesh_RLS)
 
 # Doing some pre-testing of the data to see what interesting trends there are
 
+## Looking at the fish data
+
+### Total fish
+
+#### Total fish abundance
+
+##### By protection
+
+```{r Total fish abundance by protection}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_fish))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+##### By kelp and kelp pa
+
+```{r Total fish abundance by kelp}
+ggplot(overall_rls_data_final, aes(x = kelp, y = total_fish))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = total_fish))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+#### Fish Sizes
+
+##### By protection
+
+```{r Looking at fish size by protection}
+ggplot(overall_rls_data_expanded, aes(x = size_class, fill = protection_status))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = protection_status, y = size_class))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = protection_status, y = size_class))+
+  geom_jitter(height = 0)+
+  theme.figure()
+
+protected_fish <- overall_rls_data_expanded%>%
+  filter(protection_status == "protected")
+
+protected_fish_mean <- mean(protected_fish$size_class)
+
+unprotected_fish <- overall_rls_data_expanded%>%
+  filter(protection_status == "unprotected")
+
+unprotected_fish_mean <- mean(unprotected_fish$size_class)
+```
+
+##### By kelp and kelp pa
+
+```{r}
+ggplot(overall_rls_data_expanded, aes(x = size_class, fill = kelp))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = size_class, fill = kelp_pa))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = kelp, y = size_class))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = kelp_pa, y = size_class))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = kelp, y = size_class))+
+  geom_jitter(height = 0)+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded, aes(x = kelp_pa, y = size_class))+
+  geom_jitter(height = 0)+
+  theme.figure()
+```
 
 
+## Investigating the Gobies and their relationship to invertebrate grazers
+
+### Making plots on their abundance between protection and kelp
+
+#### Protection
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Rhinogobiops_nicholsii))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+#### Kelp and kelp pa
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp, y = Rhinogobiops_nicholsii))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa
+                                   
+                                   , y = Rhinogobiops_nicholsii))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### Seeing if the gobies are correlated with urchins or snails
 
 # Initial modelling
 
