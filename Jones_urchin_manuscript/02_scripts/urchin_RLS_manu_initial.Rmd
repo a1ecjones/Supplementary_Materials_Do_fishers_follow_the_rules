@@ -15,7 +15,6 @@ library(tidyverse)
 library(here)
 library(sdmTMB)
 library(sf)
-library(sdmTMB)
 library(ggspatial)
 library(cowplot)
 
@@ -219,11 +218,56 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
            Sebastes_nebulosus + Sebastes_flavidus)
 ```
 
-```{r}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_urchins))+
-  geom_boxplot()
+
+## Making a theme for all subsequent figures
+
+```{r Making theme for all subsequent figures, echo=FALSE}
+theme.figure <- function (){
+  theme_bw(base_size = 12) +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    #axis.line = element_line(colour = "black"),
+    axis.title = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 14, face = "plain"),
+    legend.text = element_text(size = 12, face = "plain"),
+    legend.title = element_text(size = 14, face = "bold")) 
+}
 ```
 
+## Making some preliminary boxplots of the different groups
+
+```{r Making a preliminary boxplot}
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_rockfish))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+
+```{r Making a preliminary boxplot}
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_fish))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+```{r Making a preliminary boxplot}
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_urchins))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+
+```{r Making a preliminary boxplot}
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = Mesocentrotus_franciscanus))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+
+```{r Making a preliminary boxplot}
+ggplot(overall_rls_data_groups, aes(x = protection_status, y = Pomaulax_gibberosus))+
+  geom_boxplot()+
+  theme.figure()
+```
 
 ## Adding recreational fishing boat location data to the data frame
 
@@ -289,6 +333,10 @@ rec_boats_fishing2023 <- DFO_data_raw_2023%>%
   #selecting all of the columns that are needed for further analysis
     select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+
+#Subsetting the dataframe to have points from only the region of interest
+rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.76511688 & Latitude <= 49.00508194 & 
+                                  Longitude >= -125.4114807 & Longitude <= -124.987017)
 ```
 
 
@@ -323,6 +371,10 @@ rec_boats_fishing2022 <- DFO_data_raw_2022%>%
   #selecting all of the columns that are needed for further analysis
     select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+
+#Subsetting the dataframe to have points from only the region of interest
+rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.76511688 & Latitude <= 49.00508194 & 
+                                  Longitude >= -125.4114807 & Longitude <= -124.987017)
 ```
 
 
@@ -356,12 +408,16 @@ rec_boats_fishing2021 <- DFO_data_raw_2021%>%
    filter(rec_boats_fishing != 0)%>%
   select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+
+#Subsetting the dataframe to have points from only the region of interest
+rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.76511688 & Latitude <= 49.00508194 & 
+                                  Longitude >= -125.4114807 & Longitude <= -124.987017)
 ```
 
 
 #### Combining the three years of data into one data frame
 ```{r Combining the three years of data by row}
-rec_boats_fishing_total <- rbind(rec_boats_fishing2021, rec_boats_fishing2022, rec_boats_fishing2023)
+rec_boats_fishing_total <- rbind(rec_boats_fishing2021_subset, rec_boats_fishing2022_subset, rec_boats_fishing2023_subset)
 ```
 
 ### Adding the recreational fishing boat data to the data frame
@@ -539,22 +595,29 @@ overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
 overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 190, seq(3, 189, by = 1))]
 ```
 
+
+## Adding a column for site kelp characteristics
+
+```{r Adding a column for site kelp characteristics}
+overall_rls_data_final <- overall_rls_data_final%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+    TRUE ~ "Barren"
+  ))
+```
+
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp, y = Pomaulax_gibberosus))+
+  geom_jitter(height = 0)
+```
+
+
 # Making some plots
 
-## Making a theme for all subsequent figures
-
-```{r Making theme for all subsequent figures, echo=FALSE}
-theme.figure <- function (){
-  theme_bw(base_size = 12) +
-  theme(panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    #axis.line = element_line(colour = "black"),
-    axis.title = element_text(size = 16, face = "bold"),
-    axis.text = element_text(size = 14, face = "plain"),
-    legend.text = element_text(size = 12, face = "plain"),
-    legend.title = element_text(size = 14, face = "bold")) 
-}
-```
 
 ## Making site maps
 
@@ -696,7 +759,7 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
 ```{r Overall site map with the site locations}
 (overall_site_map <- ggplot()+
     geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
-   #The lines below plot the pl=olygons of the different protected areas within
+   #The lines below plot the polygons of the different protected areas within
    #the sound
    geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
    geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
@@ -1004,6 +1067,12 @@ mesh_RLS <- make_mesh(overall_rls_data_final, xy_cols = c("easting_km", "northin
 
 plot(mesh_RLS)
 ```
+
+
+
+# Doing some pre-testing of the data to see what interesting trends there are
+
+
 
 
 # Initial modelling
