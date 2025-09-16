@@ -651,8 +651,8 @@ overall_rls_data_final <- overall_rls_data_groups%>%
 overall_rls_data_final$year <- format(overall_rls_data_final$survey_date, "%Y")
 
 #reordering the df
-overall_rls_data_final <- overall_rls_data_final[,c(seq(1, 5, by = 1), 189,
-                                                    seq(6, 188, by = 1))]
+overall_rls_data_final <- overall_rls_data_final[,c(seq(1, 5, by = 1), 192,
+                                                    seq(6, 191, by = 1))]
 
 overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
 ```
@@ -671,7 +671,7 @@ overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
     site_code %in% c("BMSC26", "BMSC27") ~ "Sarita"
   ))
 
-overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 190, seq(3, 189, by = 1))]
+overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 193, seq(3, 192, by = 1))]
 ```
 
 
@@ -688,7 +688,7 @@ overall_rls_data_final <- overall_rls_data_final%>%
      TRUE ~ "Barren"
   ))
 
-overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 191, seq(3, 190, by = 1))]
+overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 194, seq(4, 193, by = 1))]
 ```
 
 ```{r Combining the groups into either presence or absence of macroalgae}
@@ -698,7 +698,7 @@ overall_rls_data_final <- overall_rls_data_final%>%
     kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
   ))
 
-overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 192, seq(4, 191, by = 1))]
+overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 4, 195, seq(5, 194, by = 1))]
 ```
 
 
