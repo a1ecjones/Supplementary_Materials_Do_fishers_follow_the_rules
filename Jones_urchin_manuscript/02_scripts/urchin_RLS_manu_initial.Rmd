@@ -216,8 +216,25 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
            Scorpaenichthys_marmoratus + Sebastes_caurinus + Sebastes_flavidus + Sebastes_maliger + Sebastes_melanops +
            Sebastes_nebulosus + Sebastes_pinniger + Sebastes_spp. + Synchirus_gilli + Zalophus_californianus,
          total_rockfish = Sebastes_spp. + Sebastes_pinniger + Sebastes_caurinus + Sebastes_maliger + Sebastes_melanops +
-           Sebastes_nebulosus + Sebastes_flavidus)
+           Sebastes_nebulosus + Sebastes_flavidus,
+         total_mesograzers = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
+           Lottia + Lottia_scutum + Megathura_crenulata + Mesocentrotus_franciscanus + Mimulus_foliatus +
+           Pagurus_hemphilli + Pomaulax_gibberosus + Pugettia_foliata + Pugettia_gracilis + Pugettia_producta +
+           Pugettia_richii + Strongylocentrotus_droebachiensis + Strongylocentrotus_purpuratus + Tegula_funebralis,
+         mesograzers_w_o_urchins = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
+           Lottia + Lottia_scutum + Megathura_crenulata + Mimulus_foliatus +
+           Pagurus_hemphilli + Pomaulax_gibberosus + Pugettia_foliata + Pugettia_gracilis + Pugettia_producta +
+           Pugettia_richii + Tegula_funebralis,
+         total_nudibranchs = Acanthodoris_hudsoni + Acanthodoris_nanaimoensis + Aglaja_ocelligera +
+           Aldisa + Antiopella_fusca + Armina_californica + Boreoberthella_chacei + Cadlina + Cadlina_luteomarginata +
+           Cadlina_modesta + Cadlina_sylviaearleae + Coryphella_trilineata + Coryphella_trophina + Coryphella_verrucosa +
+           Dendronotus_albus + Dendronotus_iris + Diaulula_odonoghuei + Diaulula_sandiegensis +
+           Dirona_albolineata + Dirona_pellucida + Doris_montereyensis + Doris_odhneri + 
+           Geitodoris_heathi + Hermissenda_crassicornis + Limacia_cockerelli + Montereina_nobilis +
+           Onchidoris_bilamellata + Polycera_tricolor + Rostanga_pulchra + Triopha_catalinae + Triopha_modesta +
+           Triopha_spp. + Tritonia_festiva)
 ```
+
 
 
 ## Making a DF with fish sizes overall
@@ -278,83 +295,6 @@ overall_rls_data_expanded <- overall_rls_data_expanded%>%
     kelp %in% c("Forest", "Understory") ~ "Present",
     kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
   ))
-```
-
-
-
-```{r Pivoting fish data to wide form}
-overall_rls_data_sizes_raw <- overall_rls_data_raw_lat_long%>%
-   select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
-            "survey_latitude", "survey_longitude"))%>%
-  filter(phylum == "Chordata")%>%
-   group_by(site_code, site_name, latitude, longitude, survey_date, depth, size_class)%>%
-  summarise(site_count_by_size = sum(total))
-
-overall_rls_data_sizes_raw$size_class <- as.factor(overall_rls_data_sizes_raw$size_class)
-
-overall_rls_data_sizes_raw_wide <- overall_rls_data_sizes_raw%>%
-  pivot_wider(
-    names_from = size_class,
-    values_from = site_count_by_size,
-    values_fill = 0
-  )
-```
-
-```{r Cutting the unnecessary sites}
-#Cutting the other sites
-
-overall_rls_data_clean_sizes <- overall_rls_data_sizes_raw_wide%>%
-  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
-                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
-                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
-                          "BMSC8", "BMSC9"))%>%
-#Adding the protection status to the dataset
-mutate(protection_status = case_when(
-  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
-                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
-                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
-  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
-))
-
-overall_rls_data_clean_sizes$site_code <- as.factor(overall_rls_data_clean_sizes$site_code)
-overall_rls_data_clean_sizes$site_name <- as.factor(overall_rls_data_clean_sizes$site_name)
-overall_rls_data_clean_sizes$protection_status <- as.factor(overall_rls_data_clean_sizes$protection_status)
-```
-
-```{r Adding a column for year to the sizes df}
-#Extracting the year from the date column and then making a new column called
-#year
-overall_rls_data_clean_sizes$year <- format(overall_rls_data_clean_sizes$survey_date, "%Y")
-
-#reordering the df
-overall_rls_data_clean_sizes <- overall_rls_data_clean_sizes[,c(seq(1, 5, by = 1), 27,
-                                                    seq(6, 26, by = 1))]
-
-overall_rls_data_clean_sizes$year <- as.numeric(overall_rls_data_clean_sizes$year)
-```
-
-```{r Adding a column for site kelp characteristics to the size df}
-overall_rls_data_clean_sizes <- overall_rls_data_clean_sizes%>%
-  mutate(kelp = case_when(
-    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
-    site_code %in% c("BMSC10") ~ "Prior forest",
-    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
-    site_code %in% c("BMSC1") ~ "Understory",
-   #This makes all the remaining ones equal to barren
-     TRUE ~ "Barren"
-  ))
-
-#overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 191, seq(3, 190, by = 1))]
-```
-
-```{r Combining the groups into either presence or absence of macroalgae for the size df}
-overall_rls_data_clean_sizes <- overall_rls_data_clean_sizes%>%
-  mutate(kelp_pa = case_when(
-    kelp %in% c("Forest", "Understory") ~ "Present",
-    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
-  ))
-
-#overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 192, seq(4, 191, by = 1))]
 ```
 
 
@@ -1336,6 +1276,120 @@ ggplot(overall_rls_data_final, aes(x = kelp_pa
 ```
 
 ### Seeing if the gobies are correlated with urchins or snails
+
+#### Urchins
+
+*Some really interesting trends going on here*
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = total_urchins))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = Mesocentrotus_franciscanus))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = Strongylocentrotus_purpuratus))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = Strongylocentrotus_droebachiensis))+
+  geom_point()+
+  theme.figure()
+```
+
+##### Testing the correlation between urchins and gobies
+
+```{r Testing assumptions of pearsons r}
+#Normality
+shapiro.test(overall_rls_data_final$Rhinogobiops_nicholsii)
+hist(overall_rls_data_final$Rhinogobiops_nicholsii)
+
+#Not normal so cannot use pearsons r. Must use Spearman's instead
+
+cor.test(overall_rls_data_final$Rhinogobiops_nicholsii, overall_rls_data_final$Mesocentrotus_franciscanus,
+         method = "spearman")
+```
+The analysis shows that the red urchins and blackeye gobies are highly correlated. However, they do not appear to be linearly related
+
+#### Snails
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = Pomaulax_gibberosus))+
+  geom_point()+
+  theme.figure()
+```
+
+##### Testing the correlation of snails and blackeye gobies
+
+```{r Spearmans correlation test on the snails and gobies}
+cor.test(overall_rls_data_final$Rhinogobiops_nicholsii, overall_rls_data_final$Pomaulax_gibberosus,
+         method = "spearman")
+```
+No apparent correlation between the snails and the red turban snails.
+
+
+## Looking at the urchins
+
+The counts are mainly red sea urchins and the other species appear to have quite low abundances
+
+### Protection
+
+```{r Urchin abundance between protection}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_urchins))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Mesocentrotus_franciscanus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Strongylocentrotus_purpuratus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Strongylocentrotus_droebachiensis))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### Kelp
+
+```{r Urchin abundance between kelp and kelp pa}
+ggplot(overall_rls_data_final, aes(x = kelp, y = total_urchins))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp, y = Mesocentrotus_franciscanus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp, y = Strongylocentrotus_purpuratus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp, y = Strongylocentrotus_droebachiensis))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = total_urchins))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Mesocentrotus_franciscanus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Strongylocentrotus_purpuratus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Strongylocentrotus_droebachiensis))+
+  geom_boxplot()+
+  theme.figure()
+```
 
 # Initial modelling
 
