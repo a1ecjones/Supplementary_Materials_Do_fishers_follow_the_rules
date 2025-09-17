@@ -17,6 +17,7 @@ library(sdmTMB)
 library(sf)
 library(ggspatial)
 library(cowplot)
+library(waver)
 
 ```
 
@@ -152,8 +153,16 @@ mutate(latitude = if_else(site_code == "BMSC21", 48.85205078, latitude))%>%
  mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))
 ```
 
+```{r Converting species with duplicate names to the accepted one}
+overall_rls_data_raw_lat_long_updated_names <- overall_rls_data_raw_lat_long%>%
+  mutate(reporting_name = if_else(reporting_name == "Phyllolithodes papillosus",
+                                  "Echidnocerus cibarius", reporting_name))
+```
+
+
+
 ```{r Converting to form with a column for each species}
-overall_rls_data_raw_wide <- overall_rls_data_raw_lat_long%>%
+overall_rls_data_raw_wide <- overall_rls_data_raw_lat_long_updated_names%>%
   select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
             "survey_latitude", "survey_longitude"))%>%
   group_by(site_code, site_name, latitude, longitude, survey_date, depth, reporting_name)%>%
@@ -188,13 +197,14 @@ mutate(protection_status = case_when(
   site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
 ))
 
-overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182,
-                                                    seq(7, 181, by = 1))]
+overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 181,
+                                                    seq(7, 180, by = 1))]
 
 overall_rls_data_clean$site_code <- as.factor(overall_rls_data_clean$site_code)
 overall_rls_data_clean$site_name <- as.factor(overall_rls_data_clean$site_name)
 overall_rls_data_clean$protection_status <- as.factor(overall_rls_data_clean$protection_status)
 ```
+
 
 ## Making some specific columns for modelling
 
@@ -235,6 +245,170 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
            Triopha_spp. + Tritonia_festiva)
 ```
 
+
+```{r Adding a column for year}
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_groups$year <- format(overall_rls_data_groups$survey_date, "%Y")
+
+#reordering the df
+#overall_rls_data_groups <- overall_rls_data_groups[,c(seq(1, 5, by = 1), 192,
+  #                                                  seq(6, 191, by = 1))]
+
+overall_rls_data_groups$year <- as.numeric(overall_rls_data_groups$year)
+```
+
+
+```{r Adding a column for the regions for each site}
+  overall_rls_data_groups <- overall_rls_data_groups%>%
+  mutate(region = case_when(
+    site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC19", "BMSC2",
+                     "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC25", "BMSC3",
+                     "BMSC4", "BMSC5", "BMSC9") ~ "Deer group/Bamfield",
+    site_code %in% c("BMSC13", "BMSC14", "BMSC15", "BMSC16", "BMSC17", 
+                     "BMSC18") ~ "Broken Group",
+    site_code %in% c("BMSC24", "BMSC6", "BMSC7", "BMSC8") ~ "Deep Imperial Eagle Channel",
+    site_code %in% c("BMSC26", "BMSC27") ~ "Sarita"
+  ))
+  
+
+#overall_rls_data_groups <- overall_rls_data_groups[, c(1, 2, 193, seq(3, 192, by = 1))]
+```
+
+
+```{r Adding columns for site kelp characteristics}
+overall_rls_data_groups <- overall_rls_data_groups%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+
+
+#overall_rls_data_groups <- overall_rls_data_groups[, c(1, 2, 3, 194, seq(4, 193, by = 1))]
+```
+
+
+## Calculating and adding the openness of each site to the data frame
+
+```{r Making dfs of the unique sites and then just the lat and long, echo=FALSE, include=FALSE}
+#Making a df with just the unique site info
+site_data <- overall_rls_data_final%>%
+  distinct(site_code, site_name, latitude, longitude)
+
+#Making a df with just the unique lat and longs
+site_coords <- site_data%>%
+  ungroup()%>%
+  select(latitude, longitude)%>%
+  distinct()
+
+#This converts the site coordinates into a sf object and specifies the 
+#coordinate reference system to be the same as the shape file
+site_sp <- st_as_sf(site_coords, coords = c("longitude", "latitude"), crs = 4326)
+```
+
+
+```{r Loading in the shapefiles to do the fetch calculations, include=FALSE}
+#This is a high resolution shape file from Hakai. This code loads in the shape
+#file and saves it as the proper shape file object
+VI_base_layer_hi_res <- read_sf(dsn = here("./01_raw_data/hakai_zip"),
+                                stringsAsFactors = F)
+
+VI_base_layer_hi_res_sf <- st_as_sf(VI_base_layer_hi_res)
+
+#specifying the projection to use for the sf
+st_crs(VI_base_layer_hi_res_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+
+
+#This subsets the shape file to only be of Barkley Sound to make plotting more
+#efficient
+
+#This makes coordinate limits to subset the shapefile
+shp_xmin <- -125.4
+shp_xmax <- -124.95
+shp_ymin <- 48.7
+shp_ymax <- 49.0
+
+#This makes a bounding of the coordinates that I just made
+bbox <- st_bbox(c(xmin = shp_xmin, ymin = shp_ymin, xmax = shp_xmax, ymax = shp_ymax))
+
+#This converts the boundary box to an SFC object
+bbox_sf <- st_as_sfc(bbox)
+
+#This crops the shape file to the area of the bounding box
+VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
+#plot(VI_base_layer_hi_res_sf_subset)
+```
+
+```{r Calculating the fetch for the sites, eval=FALSE}
+#Makes an object of all the bearings to calculate fetch along
+bearings_openness <- seq(7.5, 360, by = 7.5)
+
+#Specifies to use the GEOS engine
+sf::sf_use_s2(FALSE)
+
+#This calculates the fetch for each site along each of the bearings calculated
+#above. Max possible fetch is 650,000 meters. It is using the shape file from 
+#above to know where land is. This will likely take a very long time to run
+#so do not worry.
+#I have ## this code out because it takes way too long to run. There is code in
+#the chunk below that will load in the data from a .csv that has already been
+#made by running the fetch_len_multi function
+
+fetch_df_openness <- fetch_len_multi(site_sp,
+                                         bearings = bearings_openness, 
+                                          dmax = 650000, 
+                                          shoreline = VI_base_layer_hi_res_sf, 
+                                          projected = FALSE)
+
+#Converting the raw fetch data into a df
+fetch_df_openness <- as.data.frame(fetch_df_openness)
+
+#Saving the fetch data to a .csv so that the fetch function does not need to be
+#run
+write_csv(fetch_df_openness, here("./01_raw_data/fetch_df_openness.csv"))
+```
+
+```{r Loading in the pre calculated fetch data, echo=FALSE}
+fetch_df_openness <- read_csv(here("./01_raw_data/fetch_df_openness.csv"))
+```
+
+```{r Turning the raw openness fetch data into a dataframe with column labels}
+#Making an object with all of the site code names listed to be able to make a
+#column of site codes in the fetch df below
+site_code <- unique(overallc("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15", "BMSC16",
+               "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24",
+               "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC8", "BMSC9")
+
+#Adding a column with the site codes
+fetch_df_2024_openness$site_code <- site_code
+#Adding a column with the site lat
+fetch_df_2024_openness$latitude <- site_coords_2024$latitude
+#Adding a column with the site long
+fetch_df_2024_openness$longitude <- site_coords_2024$longitude
+
+#Reorganizing the order of the columns so that site code, lat, and long are 
+#first
+fetch_df_2024_openness_final <- fetch_df_2024_openness[, c(49, 50, 51, seq(1, 48, by = 1))]
+
+#Converting into long format for further analysis and adding to the RLS data
+fetch_df_2024_openness_long <- fetch_df_2024_openness_final%>%
+  #Makes column with bearing degree and column with corresponding fetch
+  pivot_longer(cols = `7.5`: `360`, 
+               names_to = "degree", 
+               values_to = "fetch", 
+               #Removes the prefix "degree" from the values going into the 
+               #degree column
+               names_prefix = "degree")
+```
 
 
 ## Making a DF with fish sizes overall
@@ -298,6 +472,110 @@ overall_rls_data_expanded <- overall_rls_data_expanded%>%
 ```
 
 
+## Making a df for plotting community composition
+
+```{r}
+overall_rls_data_expanded_with_all_species <- overall_rls_data_raw_lat_long%>%
+  uncount(total)
+
+
+#Removing unnecessary columns
+overall_rls_data_expanded_with_all_species <- overall_rls_data_expanded_with_all_species%>%
+  select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude", "geom"))%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+
+overall_rls_data_expanded_with_all_species$site_code <- as.factor(overall_rls_data_expanded_with_all_species$site_code)
+overall_rls_data_expanded_with_all_species$site_name <- as.factor(overall_rls_data_expanded_with_all_species$site_name)
+overall_rls_data_expanded_with_all_species$protection_status <- as.factor(overall_rls_data_expanded_with_all_species$protection_status)
+
+
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_expanded_with_all_species$year <- format(overall_rls_data_expanded_with_all_species$survey_date, "%Y")
+
+overall_rls_data_expanded_with_all_species$year <- as.numeric(overall_rls_data_expanded_with_all_species$year)
+
+#Adding columns for site kelp characteristics
+overall_rls_data_expanded_with_all_species <- overall_rls_data_expanded_with_all_species%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+```
+
+## Making a df for plotting community comp without urchins
+
+```{r}
+overall_rls_data_expanded_no_urch <- overall_rls_data_raw_lat_long%>%
+  filter(!reporting_name %in% c("Mesocentrotus franciscanus", "Strongylocentrotus purpuratus",
+                                "Strongylocentrotus droebachiensis"))%>%
+  uncount(total)
+
+#Removing unnecessary columns
+overall_rls_data_expanded_no_urch <- overall_rls_data_expanded_no_urch%>%
+  select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude", "geom"))%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+
+overall_rls_data_expanded_no_urch$site_code <- as.factor(overall_rls_data_expanded_no_urch$site_code)
+overall_rls_data_expanded_no_urch$site_name <- as.factor(overall_rls_data_expanded_no_urch$site_name)
+overall_rls_data_expanded_no_urch$protection_status <- as.factor(overall_rls_data_expanded_no_urch$protection_status)
+
+
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_expanded_no_urch$year <- format(overall_rls_data_expanded_no_urch$survey_date, "%Y")
+
+overall_rls_data_expanded_no_urch$year <- as.numeric(overall_rls_data_expanded_no_urch$year)
+
+#Adding columns for site kelp characteristics
+overall_rls_data_expanded_no_urch <- overall_rls_data_expanded_no_urch%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+```
+
+
 ## Making a theme for all subsequent figures
 
 ```{r Making theme for all subsequent figures, echo=FALSE}
@@ -313,40 +591,6 @@ theme.figure <- function (){
 }
 ```
 
-## Making some preliminary boxplots of the different groups
-
-```{r Making a preliminary boxplot}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_rockfish))+
-  geom_boxplot()+
-  theme.figure()
-```
-
-
-```{r Making a preliminary boxplot}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_fish))+
-  geom_boxplot()+
-  theme.figure()
-```
-
-```{r Making a preliminary boxplot}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = total_urchins))+
-  geom_boxplot()+
-  theme.figure()
-```
-
-
-```{r Making a preliminary boxplot}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = Mesocentrotus_franciscanus))+
-  geom_boxplot()+
-  theme.figure()
-```
-
-
-```{r Making a preliminary boxplot}
-ggplot(overall_rls_data_groups, aes(x = protection_status, y = Pomaulax_gibberosus))+
-  geom_boxplot()+
-  theme.figure()
-```
 
 ## Adding recreational fishing boat location data to the data frame
 
@@ -643,71 +887,6 @@ overall_rls_data_final <- overall_rls_data_groups%>%
 ```
 
 
-## Adding a column for year to the data frame
-
-```{r Adding a column for year}
-#Extracting the year from the date column and then making a new column called
-#year
-overall_rls_data_final$year <- format(overall_rls_data_final$survey_date, "%Y")
-
-#reordering the df
-overall_rls_data_final <- overall_rls_data_final[,c(seq(1, 5, by = 1), 192,
-                                                    seq(6, 191, by = 1))]
-
-overall_rls_data_final$year <- as.numeric(overall_rls_data_final$year)
-```
-
-## Adding a column for region to the data frame in case we need to use it
-
-```{r Adding a column for the regions for each site}
-  overall_rls_data_final <- overall_rls_data_final%>%
-  mutate(region = case_when(
-    site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC19", "BMSC2",
-                     "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC25", "BMSC3",
-                     "BMSC4", "BMSC5", "BMSC9") ~ "Deer group/Bamfield",
-    site_code %in% c("BMSC13", "BMSC14", "BMSC15", "BMSC16", "BMSC17", 
-                     "BMSC18") ~ "Broken Group",
-    site_code %in% c("BMSC24", "BMSC6", "BMSC7", "BMSC8") ~ "Deep Imperial Eagle Channel",
-    site_code %in% c("BMSC26", "BMSC27") ~ "Sarita"
-  ))
-
-overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 193, seq(3, 192, by = 1))]
-```
-
-
-## Adding a column for site kelp characteristics
-
-```{r Adding a column for site kelp characteristics}
-overall_rls_data_final <- overall_rls_data_final%>%
-  mutate(kelp = case_when(
-    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
-    site_code %in% c("BMSC10") ~ "Prior forest",
-    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
-    site_code %in% c("BMSC1") ~ "Understory",
-   #This makes all the remaining ones equal to barren
-     TRUE ~ "Barren"
-  ))
-
-overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 194, seq(4, 193, by = 1))]
-```
-
-```{r Combining the groups into either presence or absence of macroalgae}
-overall_rls_data_final <- overall_rls_data_final%>%
-  mutate(kelp_pa = case_when(
-    kelp %in% c("Forest", "Understory") ~ "Present",
-    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
-  ))
-
-overall_rls_data_final <- overall_rls_data_final[, c(1, 2, 3, 4, 195, seq(5, 194, by = 1))]
-```
-
-
-
-```{r}
-ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Mesocentrotus_franciscanus))+
-  #geom_jitter(height = 0)+
-  geom_boxplot()
-```
 
 
 # Making some plots
@@ -734,24 +913,24 @@ long_max = max(overall_rls_data_final$longitude) + 0.05
 #large inset plot of Vancouver Island. Similar to the high res shape file I 
 #subsetted it to only include the area around Vancouver Island.
 
-VI_base_layer <- read_sf(dsn = here("./01_raw_data/canada_sf_data", ""), 
-                         stringsAsFactors = F)
-VI_base_layer_sf <- st_as_sf(VI_base_layer)
+#VI_base_layer <- read_sf(dsn = here("./01_raw_data/canada_sf_data", ""), 
+                  #       stringsAsFactors = F)
+#VI_base_layer_sf <- st_as_sf(VI_base_layer)
 
 #specifying the projection for the sf
-st_crs(VI_base_layer_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+#st_crs(VI_base_layer_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
 
 
-shp_xmin_low <- -129
-shp_xmax_low <- -122.5
-shp_ymin_low <- 48
-shp_ymax_low <- 52
+#shp_xmin_low <- -129
+#shp_xmax_low <- -122.5
+#shp_ymin_low <- 48
+#shp_ymax_low <- 52
 
-bbox_low <- st_bbox(c(xmin = shp_xmin_low, ymin = shp_ymin_low, xmax = shp_xmax_low, ymax = shp_ymax_low))
+#bbox_low <- st_bbox(c(xmin = shp_xmin_low, ymin = shp_ymin_low, xmax = shp_xmax_low, ymax = shp_ymax_low))
 
-bbox_low_sf <- st_as_sfc(bbox_low)
+#bbox_low_sf <- st_as_sfc(bbox_low)
 
-VI_base_layer_sf_subset <- st_crop(VI_base_layer_sf, bbox_low_sf)
+#VI_base_layer_sf_subset <- st_crop(VI_base_layer_sf, bbox_low_sf)
 #plot(VI_base_layer_sf_subset)
 ```
 
@@ -1190,6 +1369,10 @@ ggplot(overall_rls_data_final, aes(x = kelp, y = total_fish))+
 ggplot(overall_rls_data_final, aes(x = kelp_pa, y = total_fish))+
   geom_boxplot()+
   theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = sqrt(total_urchins), y = sqrt(total_fish)))+
+  geom_point()+
+  theme.figure()
 ```
 
 #### Fish Sizes
@@ -1268,12 +1451,12 @@ ggplot(overall_rls_data_final, aes(x = kelp, y = Rhinogobiops_nicholsii))+
   geom_boxplot()+
   theme.figure()
 
-ggplot(overall_rls_data_final, aes(x = kelp_pa
-                                   
-                                   , y = Rhinogobiops_nicholsii))+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Rhinogobiops_nicholsii))+
   geom_boxplot()+
   theme.figure()
 ```
+
+Maybe seeing few gobies with understory because they are tough to spot?
 
 ### Seeing if the gobies are correlated with urchins or snails
 
@@ -1284,7 +1467,8 @@ ggplot(overall_rls_data_final, aes(x = kelp_pa
 ```{r}
 ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = total_urchins))+
   geom_point()+
-  theme.figure()
+  theme.figure()+
+  facet_wrap(~kelp_pa)
 
 ggplot(overall_rls_data_final, aes(x = Rhinogobiops_nicholsii, y = Mesocentrotus_franciscanus))+
   geom_point()+
@@ -1390,6 +1574,292 @@ ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Strongylocentrotus_droebachi
   geom_boxplot()+
   theme.figure()
 ```
+
+
+
+
+
+## Looking at the red turban snails
+
+### By protection
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Pomaulax_gibberosus))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### By kelp and kelp pa
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp, y = Pomaulax_gibberosus))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Pomaulax_gibberosus))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+
+
+## Looking at the nudibranchs
+
+### By protection
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_nudibranchs))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### By kelp and kelp pa
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp, y = total_nudibranchs))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = total_nudibranchs))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+
+## Looking at total mesograzers
+
+### By protection
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_mesograzers))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### By kelp and kelp pa
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp, y = total_mesograzers))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = total_mesograzers))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+## Looking at total mesograzers without urchins
+
+### By protection
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = mesograzers_w_o_urchins))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### By kelp and kelp pa
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp, y = mesograzers_w_o_urchins))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp, y = mesograzers_w_o_urchins))+
+  geom_boxplot()+
+  theme.figure()+
+  facet_wrap(~protection_status)
+
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = mesograzers_w_o_urchins))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = mesograzers_w_o_urchins))+
+  geom_boxplot()+
+  theme.figure()+
+  facet_wrap(~protection_status)
+```
+
+## Community composition
+
+```{r Community composition with urchins included}
+ggplot(overall_rls_data_expanded_with_all_species, aes(x = protection_status, fill = class))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded_with_all_species, aes(x = kelp, fill = class))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded_with_all_species, aes(x = kelp_pa, fill = class))+
+  geom_bar()+
+  theme.figure()
+```
+
+```{r Community composition with urchins excluded}
+ggplot(overall_rls_data_expanded_no_urch, aes(x = protection_status, fill = class))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded_no_urch, aes(x = kelp, fill = class))+
+  geom_bar()+
+  theme.figure()
+
+ggplot(overall_rls_data_expanded_no_urch, aes(x = kelp_pa, fill = class))+
+  geom_bar()+
+  theme.figure()
+```
+
+
+## Investigating potential relationship between urchins and puget sound king crabs
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = Echidnocerus_cibarius, y = Strongylocentrotus_droebachiensis))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Echidnocerus_cibarius, y = Strongylocentrotus_purpuratus))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Echidnocerus_cibarius, y = Mesocentrotus_franciscanus))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Echidnocerus_cibarius, y = total_urchins))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Echidnocerus_cibarius))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+```{r Correlation test}
+cor.test(overall_rls_data_final$Mesocentrotus_franciscanus, overall_rls_data_final$Echidnocerus_cibarius,
+         method = "spearman")
+```
+
+
+
+## Investigating potential relationship between urchins and pycno
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = Pycnopodia_helianthoides, y = total_urchins))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Pycnopodia_helianthoides, y = Mesocentrotus_franciscanus))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Pycnopodia_helianthoides, y = Strongylocentrotus_purpuratus))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = Pycnopodia_helianthoides, y = Strongylocentrotus_droebachiensis))+
+  geom_point()+
+  theme.figure()
+```
+
+
+## Which sites have few mesograzers
+
+```{r}
+#This sets the size breaks for the legend of the plot
+size_breaks_1km <- c(0, 250, 500, 1000, 1500)
+
+(mesograzer_abundance <- ggplot()+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", 
+           fill = "lightgrey")+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude, 
+                           # size =  mesograzers_w_o_urchins, 
+                            size = total_mesograzers,
+                            fill = protection_status),
+                            shape = 21)+
+#This is used to adjust the size of the points to be scaled based on the values
+    #in the mean rec boat column
+     scale_size_continuous(
+  #  range = c(2, 7),
+    breaks = size_breaks_1km,
+    #this sets the limits so that the scales can be the same overall between 
+    #all of the different plots
+    limits = c(0, 1500),
+    #This code adds the labels from the size breaks object
+    labels = size_breaks_1km,
+      name = "Mesograzer abundance")+
+ scale_fill_manual(values = c("black", "white"))+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+   location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  )+
+  annotation_scale(location = "br", text_cex = 1.3)+
+  facet_wrap(~year))
+```
+
+```{r}
+ggsave("mesograzer_abundance_with_urchins.pdf", plot = mesograzer_abundance,
+       path = here("./04_plots/manuscript_figures"),
+       width = 300, height = 300, units = "mm")
+```
+
+```{r}
+#This sets the size breaks for the legend of the plot
+size_breaks_1km <- c(0, 250, 500, 1000, 1500)
+
+(mesograzer_abundance_no_urchins <- ggplot()+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", 
+           fill = "lightgrey")+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude, 
+                           size =  mesograzers_w_o_urchins, 
+                      
+                            fill = protection_status),
+                            shape = 21)+
+#This is used to adjust the size of the points to be scaled based on the values
+    #in the mean rec boat column
+     scale_size_continuous(
+    #range = c(2, 7),
+    breaks = size_breaks_1km,
+    #this sets the limits so that the scales can be the same overall between 
+    #all of the different plots
+    limits = c(0, 1500),
+    #This code adds the labels from the size breaks object
+    labels = size_breaks_1km,
+      name = "Mesograzer abundance (no urchins)")+
+ scale_fill_manual(values = c("black", "white"))+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude", fill = "Protection\nStatus") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+   location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  )+
+  annotation_scale(location = "br", text_cex = 1.3)+
+  facet_wrap(~year))
+```
+
+```{r}
+ggsave("mesograzer_abundance_no_urchins.pdf", plot = mesograzer_abundance_no_urchins,
+       path = here("./04_plots/manuscript_figures"),
+       width = 300, height = 300, units = "mm")
+```
+
 
 # Initial modelling
 
