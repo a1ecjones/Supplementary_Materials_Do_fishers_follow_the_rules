@@ -18,7 +18,9 @@ library(sf)
 library(ggspatial)
 library(cowplot)
 library(waver)
-
+library(lubridate)
+library(eks)
+library(tmap)
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -300,7 +302,7 @@ overall_rls_data_groups <- overall_rls_data_groups%>%
 
 ```{r Making dfs of the unique sites and then just the lat and long, echo=FALSE, include=FALSE}
 #Making a df with just the unique site info
-site_data <- overall_rls_data_final%>%
+site_data <- overall_rls_data_groups%>%
   distinct(site_code, site_name, latitude, longitude)
 
 #Making a df with just the unique lat and longs
@@ -384,23 +386,21 @@ fetch_df_openness <- read_csv(here("./01_raw_data/fetch_df_openness.csv"))
 ```{r Turning the raw openness fetch data into a dataframe with column labels}
 #Making an object with all of the site code names listed to be able to make a
 #column of site codes in the fetch df below
-site_code <- unique(overallc("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15", "BMSC16",
-               "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24",
-               "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC8", "BMSC9")
+site_code <- unique(overall_rls_data_groups$site_code)
 
 #Adding a column with the site codes
-fetch_df_2024_openness$site_code <- site_code
+fetch_df_openness$site_code <- site_code
 #Adding a column with the site lat
-fetch_df_2024_openness$latitude <- site_coords_2024$latitude
+fetch_df_openness$latitude <- site_coords$latitude
 #Adding a column with the site long
-fetch_df_2024_openness$longitude <- site_coords_2024$longitude
+fetch_df_openness$longitude <- site_coords$longitude
 
 #Reorganizing the order of the columns so that site code, lat, and long are 
 #first
-fetch_df_2024_openness_final <- fetch_df_2024_openness[, c(49, 50, 51, seq(1, 48, by = 1))]
+fetch_df_openness_final <- fetch_df_openness[, c(49, 50, 51, seq(1, 48, by = 1))]
 
 #Converting into long format for further analysis and adding to the RLS data
-fetch_df_2024_openness_long <- fetch_df_2024_openness_final%>%
+fetch_df_openness_long <- fetch_df_openness_final%>%
   #Makes column with bearing degree and column with corresponding fetch
   pivot_longer(cols = `7.5`: `360`, 
                names_to = "degree", 
@@ -410,6 +410,24 @@ fetch_df_2024_openness_long <- fetch_df_2024_openness_final%>%
                names_prefix = "degree")
 ```
 
+```{r Summing the fetch vectors for each site then dividing by the largest openness value}
+#Calculates the openness of each site
+openness <- fetch_df_openness_long%>%
+  #grouping by each site
+  group_by(site_code, latitude, longitude)%>%
+  #adding up all of the fetch vectors for each site
+  summarise(openness = sum(fetch))
+  
+#identifying the largest openness score within the dataset
+max_openness <- max(openness$openness)
+
+#Making a column of normalized openness by dividing by the max observed openness
+openness <- openness%>%
+mutate(norm_openness = openness / max_openness)
+
+#Merging the modelling df with the openness df by each site
+overall_rls_data_groups_with_openness <- merge(overall_rls_data_groups, openness, by = c("site_code", "latitude", "longitude"))
+```
 
 ## Making a DF with fish sizes overall
 
@@ -887,8 +905,6 @@ overall_rls_data_final <- overall_rls_data_groups%>%
 ```
 
 
-
-
 # Making some plots
 
 
@@ -984,6 +1000,11 @@ numukamis_area <- st_read(here("./01_raw_data/Numukamis_closed_area.kml"))
 baeria_rocks_er <- st_read(here("./01_raw_data/baeria_rocks.kml"))
 ```
 
+
+```{r Loading in the Folger Passage RCA}
+folger_pass_RCA <- st_read(here("./01_raw_data/folger_passage_RCA.kml"))
+```
+
 ### Loading in the flight track for the DFO surveys
 
 I also traced the DFO flight path used for the DFO flyover surveys in Barkley Sound using Google Earth and saved it as a kml file.
@@ -1037,6 +1058,7 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
    geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
    geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
    geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
    #This adds in the points of the survey sites, shifted slightly to be not 
    #overlapping
      geom_point(overall_rls_data_final_minor_shifted, 
@@ -1858,6 +1880,141 @@ size_breaks_1km <- c(0, 250, 500, 1000, 1500)
 ggsave("mesograzer_abundance_no_urchins.pdf", plot = mesograzer_abundance_no_urchins,
        path = here("./04_plots/manuscript_figures"),
        width = 300, height = 300, units = "mm")
+```
+
+
+
+
+# Doing further analysis of the DFO boat data
+
+Given that the DFO data is novel and provides exciting opportunities to look at the spatial properties of fishing within Barkley Sound, I will do further analysis of the boat locations, including the number of boats spotted in protected areas compared to the number of boats spotted in total, and a kernel analysis to obtain a heat map of fishing pressure in the sound.
+
+## Number of boats spotted within protected areas relative to total boats spotted
+
+```{r Finding the number of boats spotted within protected areas}
+#This line loads in the recreational fishing boat data and converts the lat and
+#long to an sf object in the same CRS as the sf objects for the protected areas
+rec_boats_fishing_total_points_wgs84 <- st_as_sf(rec_boats_fishing_total, coords = c("Longitude", "Latitude"), crs = 4326)
+
+
+#These lines return the rec boat observations that are found within the 
+#protected area polygons
+rec_boats_within_numukamis <- st_intersection(numukamis_area, rec_boats_fishing_total_points_wgs84)
+
+rec_boats_within_broken_group_RCA <- st_intersection(broken_group_RCA, rec_boats_fishing_total_points_wgs84)
+
+rec_boats_within_baeria_rocks_er <- st_intersection(baeria_rocks_er, rec_boats_fishing_total_points_wgs84)
+
+rec_boats_within_folger_pass_RCA <- st_intersection(folger_pass_RCA, rec_boats_fishing_total_points_wgs84)
+```
+
+```{r Filtering the Numukamis Bay boats to only include ones fishing there when it is actually closed}
+rec_boats_within_numukamis_final <- rec_boats_within_numukamis%>%
+  filter((Date >= as.Date("2021-08-01") & Date <= as.Date("2021-09-30")) |
+           (Date >= as.Date("2022-08-01") & Date <= as.Date("2022-09-30")) |
+           (Date >= as.Date("2023-08-01") & Date <= as.Date("2023-09-30")))
+```
+
+
+```{r Summing the total number of boats in protected areas and outside}
+#These lines add up all of the boats spotted within each protected area
+total_boats_broken_group_RCA <- sum(rec_boats_within_broken_group_RCA$rec_boats_fishing)
+total_boats_baeria_rocks_er <- sum(rec_boats_within_baeria_rocks_er$rec_boats_fishing)
+total_boats_numukamis <- sum(rec_boats_within_numukamis_final$rec_boats_fishing)
+total_boats_folger_pass_RCA <- sum(rec_boats_within_folger_pass_RCA$rec_boats_fishing)
+
+#This adds up all of the boats for a total number spotted across all protected
+#areas
+total_boats_in_protected_areas <- total_boats_broken_group_RCA + total_boats_baeria_rocks_er +
+  total_boats_numukamis + total_boats_folger_pass_RCA
+
+#This adds up all of the rec boats fishing that were spotted within Barkley 
+#Sound
+total_boats_spotted_barkley <- sum(rec_boats_fishing_total$rec_boats_fishing)
+
+
+#This line calculate the percentage of observations found in protected areas
+percent_boats_in_protected_areas <- (total_boats_in_protected_areas/total_boats_spotted_barkley) * 100
+```
+
+
+## Further Kernel Analysis of the recreational boat locations
+
+To gain a better understanding of the spatial nature of the fishing pressure in Barkley Sound I am using a Kernel Density Estimation to produce some plots of the fishing pressure as a heatmap.
+
+```{r Converting the rec boat data into a form for doing the KDE}
+#Because there are some points in the data frame that correspond to mulitple
+#boats observed I will need to uncount the data frame so there is a row for 
+#every boat observation
+rec_boat_points_for_kde <- rec_boats_fishing_total_points_wgs84%>%
+  select(Year, Month, Day, Date, rec_boats_fishing, geometry)%>%
+  uncount(rec_boats_fishing)
+
+#Converting the new dataframe back into an sf object so that the KDE function
+#will work properly and converting to a projection which is better for KDE
+#analysis
+rec_boat_points_for_kde <- st_as_sf(rec_boat_points_for_kde, sf_column_name = "geometry")
+rec_boat_points_for_kde <- st_transform(rec_boat_points_for_kde, crs = 32610)
+
+#Filtering so there is a df for each year
+rec_boat_points_for_kde_21 <- rec_boat_points_for_kde%>%
+  filter(Year == 2021)
+
+rec_boat_points_for_kde_22 <- rec_boat_points_for_kde%>%
+  filter(Year == 2022)
+
+rec_boat_points_for_kde_23 <- rec_boat_points_for_kde%>%
+  filter(Year == 2023)
+```
+
+
+```{r Calculating the KDE for the rec boat data}
+#This is the function that computes the KDE for the data
+rec_boat_kde_overall <- st_kde(rec_boat_points_for_kde)
+rec_boat_kde_21 <- st_kde(rec_boat_points_for_kde_21)
+rec_boat_kde_22 <- st_kde(rec_boat_points_for_kde_22)
+rec_boat_kde_23 <- st_kde(rec_boat_points_for_kde_23)
+```
+
+```{r Converting the other aspects of the map into the same projection as the KDE}
+VI_base_layer_hi_res_sf_subset_projected <- st_transform(VI_base_layer_hi_res_sf_subset, crs = 32610)
+```
+
+
+```{r Plotting the overall KDE}
+ggplot(rec_boat_kde_overall)+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_sf()+
+   # coord_sf(xlim = c(long_min, long_max))+
+           #ylim = c(lat_min, lat_max))+
+  theme.figure()
+
+  
+```
+
+
+```{r}
+pts <- st_as_sf(
+  data.frame(id = 1:50,
+             x = rnorm(50, 5000, 1000),
+             y = rnorm(50, 5000, 1000)),
+  coords = c("x", "y"),
+  crs = 32610
+)
+
+# kernel density
+kde <- st_kde(pts)
+
+# plot
+plot(kde)
+```
+
+
+```{r Plotting the KDE}
+kde_contour_plot <- ggplot(rec_boat_kde)+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")
+
+kde_contour_plot + geom_sf(data = rec_boats_fishing_total_points_wgs84)
 ```
 
 
