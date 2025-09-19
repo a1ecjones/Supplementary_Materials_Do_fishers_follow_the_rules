@@ -1982,14 +1982,21 @@ VI_base_layer_hi_res_sf_subset_projected <- st_transform(VI_base_layer_hi_res_sf
 
 
 ```{r Plotting the overall KDE}
-ggplot(rec_boat_kde_overall)+
-   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
-  geom_sf()+
-   # coord_sf(xlim = c(long_min, long_max))+
-           #ylim = c(lat_min, lat_max))+
-  theme.figure()
+(overall_rec_boat_kde_map <- ggplot(rec_boat_kde_overall)+
+   geom_sf(data = VI_base_layer_hi_res_sf_subset_projected, colour = "darkgrey", fill = "lightgrey")+
+  geom_sf(data = st_get_contour(rec_boat_kde_overall),aes(fill=label_percent(contlabel)))+
+  coord_sf(
+    xlim = c(324000, 355000),  # replace with your min/max x
+    ylim = c(5406000, 5427000) # replace with your min/max y
+  )+
+   scale_fill_viridis_d(option = "B", end = 0.5, begin = 1)+
+  theme.figure())
+```
 
-  
+
+```{r}
+ggsave("overall_rec_boat_KDE.pdf", plot = overall_rec_boat_kde_map,
+       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
 ```
 
 
