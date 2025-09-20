@@ -353,10 +353,10 @@ VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
 
 ```{r Calculating the fetch for the sites, eval=FALSE}
 #Makes an object of all the bearings to calculate fetch along
-bearings_openness <- seq(7.5, 360, by = 7.5)
+#bearings_openness <- seq(7.5, 360, by = 7.5)
 
 #Specifies to use the GEOS engine
-sf::sf_use_s2(FALSE)
+#sf::sf_use_s2(FALSE)
 
 #This calculates the fetch for each site along each of the bearings calculated
 #above. Max possible fetch is 650,000 meters. It is using the shape file from 
@@ -366,18 +366,18 @@ sf::sf_use_s2(FALSE)
 #the chunk below that will load in the data from a .csv that has already been
 #made by running the fetch_len_multi function
 
-fetch_df_openness <- fetch_len_multi(site_sp,
-                                         bearings = bearings_openness, 
-                                          dmax = 650000, 
-                                          shoreline = VI_base_layer_hi_res_sf, 
-                                          projected = FALSE)
+#fetch_df_openness <- fetch_len_multi(site_sp,
+                                #         bearings = bearings_openness, 
+                                #          dmax = 650000, 
+                                 #         shoreline = VI_base_layer_hi_res_sf, 
+                                  #        projected = FALSE)
 
 #Converting the raw fetch data into a df
-fetch_df_openness <- as.data.frame(fetch_df_openness)
+#fetch_df_openness <- as.data.frame(fetch_df_openness)
 
 #Saving the fetch data to a .csv so that the fetch function does not need to be
 #run
-write_csv(fetch_df_openness, here("./01_raw_data/fetch_df_openness.csv"))
+#write_csv(fetch_df_openness, here("./01_raw_data/fetch_df_openness.csv"))
 ```
 
 ```{r Loading in the pre calculated fetch data, echo=FALSE}
@@ -898,7 +898,7 @@ rec_fishing_boat_total_radius_2km_final <- rec_fishing_boat_total_radius_2km_com
 #This step added each of the data frames with the average rec boat counts
 # to the modelling dataset. The resulting dataset has a column for avg 
 #rec boat counts for each radius distance
-overall_rls_data_final <- overall_rls_data_groups%>%
+overall_rls_data_final <- overall_rls_data_groups_with_openness%>%
  left_join(rec_fishing_boat_total_radius_1km_final, by = c("site_code"))%>%
  left_join(rec_fishing_boat_total_radius_1.5km_final, by = c("site_code"))%>%
   left_join(rec_fishing_boat_total_radius_2km_final, by = c("site_code"))%>%
