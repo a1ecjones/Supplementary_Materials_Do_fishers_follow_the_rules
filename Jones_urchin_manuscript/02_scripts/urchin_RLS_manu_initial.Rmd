@@ -930,37 +930,37 @@ long_max = max(overall_rls_data_final$longitude) + 0.05
 #large inset plot of Vancouver Island. Similar to the high res shape file I 
 #subsetted it to only include the area around Vancouver Island.
 
-#VI_base_layer <- read_sf(dsn = here("./01_raw_data/canada_sf_data", ""), 
-                  #       stringsAsFactors = F)
-#VI_base_layer_sf <- st_as_sf(VI_base_layer)
+VI_base_layer <- read_sf(dsn = here("./01_raw_data/canada_sf_data", ""), 
+                         stringsAsFactors = F)
+VI_base_layer_sf <- st_as_sf(VI_base_layer)
 
 #specifying the projection for the sf
-#st_crs(VI_base_layer_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+st_crs(VI_base_layer_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
 
 
-#shp_xmin_low <- -129
-#shp_xmax_low <- -122.5
-#shp_ymin_low <- 48
-#shp_ymax_low <- 52
+shp_xmin_low <- -129
+shp_xmax_low <- -122.5
+shp_ymin_low <- 48
+shp_ymax_low <- 52
 
-#bbox_low <- st_bbox(c(xmin = shp_xmin_low, ymin = shp_ymin_low, xmax = shp_xmax_low, ymax = shp_ymax_low))
+bbox_low <- st_bbox(c(xmin = shp_xmin_low, ymin = shp_ymin_low, xmax = shp_xmax_low, ymax = shp_ymax_low))
 
-#bbox_low_sf <- st_as_sfc(bbox_low)
+bbox_low_sf <- st_as_sfc(bbox_low)
 
-#VI_base_layer_sf_subset <- st_crop(VI_base_layer_sf, bbox_low_sf)
+VI_base_layer_sf_subset <- st_crop(VI_base_layer_sf, bbox_low_sf)
 #plot(VI_base_layer_sf_subset)
 ```
 
 ```{r Loading in the shapefiles to do the fetch calculations, include=FALSE}
 #This is a high resolution shape file from Hakai. This code loads in the shape
 #file and saves it as the proper shape file object
-VI_base_layer_hi_res <- read_sf(dsn = here("./01_raw_data/hakai_zip"),
-                                stringsAsFactors = F)
+#VI_base_layer_hi_res <- read_sf(dsn = here("./01_raw_data/hakai_zip"),
+                #                stringsAsFactors = F)
 
-VI_base_layer_hi_res_sf <- st_as_sf(VI_base_layer_hi_res)
+#VI_base_layer_hi_res_sf <- st_as_sf(VI_base_layer_hi_res)
 
 #specifying the projection to use for the sf
-st_crs(VI_base_layer_hi_res_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+#st_crs(VI_base_layer_hi_res_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
 
 
 
@@ -968,19 +968,19 @@ st_crs(VI_base_layer_hi_res_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
 #efficient
 
 #This makes coordinate limits to subset the shapefile
-shp_xmin <- -125.4
-shp_xmax <- -124.95
-shp_ymin <- 48.7
-shp_ymax <- 49.0
+#shp_xmin <- -125.4
+#shp_xmax <- -124.95
+#shp_ymin <- 48.7
+#shp_ymax <- 49.0
 
 #This makes a bounding of the coordinates that I just made
-bbox <- st_bbox(c(xmin = shp_xmin, ymin = shp_ymin, xmax = shp_xmax, ymax = shp_ymax))
+#bbox <- st_bbox(c(xmin = shp_xmin, ymin = shp_ymin, xmax = shp_xmax, ymax = shp_ymax))
 
 #This converts the boundary box to an SFC object
-bbox_sf <- st_as_sfc(bbox)
+#bbox_sf <- st_as_sfc(bbox)
 
 #This crops the shape file to the area of the bounding box
-VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
+#VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
 #plot(VI_base_layer_hi_res_sf_subset)
 ```
 
@@ -1042,12 +1042,18 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
   coord_sf(ylim = c(48.3, 50.8), xlim = c(-128.2, -123.2)) +
   theme.figure() +
    #Makes a red rectangle around Barkley Sound
-  geom_rect(xmin = long_min, xmax = long_max, ymin = lat_min, ymax = lat_max,
-            color = "red", fill = NA, linewidth = 1) +
+ # geom_rect(xmin = long_min, xmax = long_max, ymin = lat_min, ymax = lat_max,
+    #        color = "red", fill = NA, linewidth = 1) +
   labs(x = "Longitude", y = "Latitude")+
    theme(axis.text = element_blank(),
          axis.title = element_blank(),
          axis.ticks = element_blank()))
+```
+
+```{r}
+ggsave("van_isl_map.png", plot = van_isl_map,
+       path = here("./04_plots"), 
+       width = 150, height = 150, units = "mm")
 ```
 
 
@@ -1785,6 +1791,28 @@ ggplot(overall_rls_data_final, aes(x = Pycnopodia_helianthoides, y = Strongyloce
   geom_point()+
   theme.figure()
 ```
+
+## Looking at pycno relationship to protection and openness
+
+```{r}
+ggplot(overall_rls_data_final, aes(y = Pycnopodia_helianthoides, x = openness))+
+  geom_point()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(y = Pycnopodia_helianthoides, x = protection_status))+
+  geom_boxplot()+
+  theme.figure()+
+  facet_wrap(~kelp_pa)
+
+ggplot(overall_rls_data_final, aes(y = Pycnopodia_helianthoides, x = kelp))+
+  geom_boxplot()+
+  theme.figure()
+
+ggplot(overall_rls_data_final, aes(y = Pycnopodia_helianthoides, x = kelp_pa))+
+  geom_boxplot()+
+  theme.figure()
+```
+
 
 
 ## Which sites have few mesograzers
