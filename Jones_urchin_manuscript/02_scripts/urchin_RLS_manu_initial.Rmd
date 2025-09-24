@@ -1361,7 +1361,7 @@ overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
 
 ```{r Creating a mesh of the RLS sites}
 mesh_RLS <- make_mesh(overall_rls_data_final, xy_cols = c("easting_km", "northing_km"),
-                      cutoff = 1)
+                      cutoff = 5)
 
 plot(mesh_RLS)
 ```
@@ -1436,17 +1436,25 @@ wilcox.test(size_class ~ protection_status, data = overall_rls_data_expanded)
 #### Doing a permutation test of the fish sizes between the two protection statuses
 
 ```{r}
-fish_test_stat <- abs(mean(overall_rls_data_expanded$size_class[overall_rls_data_expanded$protection_status == "protected"]) -
-                        mean(overall_rls_data_expanded$size_class[overall_rls_data_expanded$protection_status == "unprotected"]))
+
+#Need to first group the average fish size per site, and then permute the site
+#averages
+site_means <- overall_rls_data_expanded%>%
+  group_by(site_code, protection_status)%>%
+  summarise(mean_size = mean(size_class), .groups = "drop")
+
+
+fish_test_stat <- mean(site_means$mean_size[site_means$protection_status == "protected"]) -
+                        mean(site_means$mean_size[site_means$protection_status == "unprotected"])
 
 
 set.seed(15)
 
-variable <- overall_rls_data_expanded$size_class
+variable <- site_means$mean_size
 
-protected_index <- which(overall_rls_data_expanded$protection_status == "protected")
+protected_index <- which(site_means$protection_status == "protected")
 
-unprotected_index <- which(overall_rls_data_expanded$protection_status == "unprotected")
+unprotected_index <- which(site_means$protection_status == "unprotected")
 
 n <- length(variable)
 
@@ -1456,7 +1464,7 @@ fish_perm_test_stat <- numeric(P)
 
 for (i in seq_len(P)) {
   perm <- sample.int(n, replace = FALSE)  
-  fish_perm_test_stat[i] <- abs(mean(variable[perm][protected_index]) - mean(variable[perm][unprotected_index]))
+  fish_perm_test_stat[i] <- mean(variable[perm][protected_index]) - mean(variable[perm][unprotected_index])
 }
 
 pval <- (sum(fish_perm_test_stat >= fish_test_stat) + 1) / (P + 1)
@@ -1465,7 +1473,35 @@ hist(fish_perm_test_stat)
 
 ```
 
+```{r Permutation of fish numbers}
+fish_num_test_stat <- abs(mean(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "protected"]) -
+                        mean(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "unprotected"]))
 
+set.seed(15)
+
+variable_num <- overall_rls_data_final$total_fish
+
+protected_index_num <- which(overall_rls_data_final$protection_status == "protected")
+
+unprotected_index_num <- which(overall_rls_data_final$protection_status == "unprotected")
+
+n_num <- length(variable_num)
+
+P_num <- 10000
+
+fish_perm_test_stat_num <- numeric(P_num)
+
+for (i in seq_len(P)) {
+  perm_num <- sample.int(n_num, replace = FALSE)  
+  fish_perm_test_stat_num[i] <- abs(mean(variable[perm_num][protected_index_num]) - mean(variable[perm_num][unprotected_index_num]))
+}
+
+pval_num <- (sum(fish_perm_test_stat_num >= fish_num_test_stat) + 1) / (P_num + 1)
+
+hist(fish_perm_test_stat_num)
+```
+
+The permutation tests show no differences between the protected and unprotected sites for fish size or number.
 
 ##### By kelp and kelp pa
 
