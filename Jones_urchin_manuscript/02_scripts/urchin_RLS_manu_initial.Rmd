@@ -356,7 +356,7 @@ VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
 #bearings_openness <- seq(7.5, 360, by = 7.5)
 
 #Specifies to use the GEOS engine
-#sf::sf_use_s2(FALSE)
+sf::sf_use_s2(FALSE)
 
 #This calculates the fetch for each site along each of the bearings calculated
 #above. Max possible fetch is 650,000 meters. It is using the shape file from 
@@ -1042,18 +1042,12 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
   coord_sf(ylim = c(48.3, 50.8), xlim = c(-128.2, -123.2)) +
   theme.figure() +
    #Makes a red rectangle around Barkley Sound
- # geom_rect(xmin = long_min, xmax = long_max, ymin = lat_min, ymax = lat_max,
-    #        color = "red", fill = NA, linewidth = 1) +
+  geom_rect(xmin = long_min, xmax = long_max, ymin = lat_min, ymax = lat_max,
+           color = "red", fill = NA, linewidth = 1) +
   labs(x = "Longitude", y = "Latitude")+
    theme(axis.text = element_blank(),
          axis.title = element_blank(),
          axis.ticks = element_blank()))
-```
-
-```{r}
-ggsave("van_isl_map.png", plot = van_isl_map,
-       path = here("./04_plots"), 
-       width = 150, height = 150, units = "mm")
 ```
 
 
@@ -1118,6 +1112,8 @@ ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
        path = here("./04_plots/manuscript_figures"),
        width = 165, height = 130, units = "mm")
 ```
+
+
 
 ## Figure N: DFO Boating impacts
 
@@ -1430,7 +1426,46 @@ unprotected_fish <- overall_rls_data_expanded%>%
   filter(protection_status == "unprotected")
 
 unprotected_fish_mean <- mean(unprotected_fish$size_class)
+
+hist(protected_fish$size_class)
+hist(unprotected_fish$size_class)
+
+wilcox.test(size_class ~ protection_status, data = overall_rls_data_expanded)
 ```
+
+#### Doing a permutation test of the fish sizes between the two protection statuses
+
+```{r}
+fish_test_stat <- abs(mean(overall_rls_data_expanded$size_class[overall_rls_data_expanded$protection_status == "protected"]) -
+                        mean(overall_rls_data_expanded$size_class[overall_rls_data_expanded$protection_status == "unprotected"]))
+
+
+set.seed(15)
+
+variable <- overall_rls_data_expanded$size_class
+
+protected_index <- which(overall_rls_data_expanded$protection_status == "protected")
+
+unprotected_index <- which(overall_rls_data_expanded$protection_status == "unprotected")
+
+n <- length(variable)
+
+P <- 10000
+
+fish_perm_test_stat <- numeric(P)
+
+for (i in seq_len(P)) {
+  perm <- sample.int(n, replace = FALSE)  
+  fish_perm_test_stat[i] <- abs(mean(variable[perm][protected_index]) - mean(variable[perm][unprotected_index]))
+}
+
+pval <- (sum(fish_perm_test_stat >= fish_test_stat) + 1) / (P + 1)
+
+hist(fish_perm_test_stat)
+
+```
+
+
 
 ##### By kelp and kelp pa
 
@@ -2013,6 +2048,10 @@ VI_base_layer_hi_res_sf_subset_projected <- st_transform(VI_base_layer_hi_res_sf
 ```{r Plotting the overall KDE}
 (overall_rec_boat_kde_map <- ggplot(rec_boat_kde_overall)+
    geom_sf(data = VI_base_layer_hi_res_sf_subset_projected, colour = "darkgrey", fill = "lightgrey")+
+   geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
   geom_sf(data = st_get_contour(rec_boat_kde_overall),aes(fill=label_percent(contlabel)))+
   coord_sf(
     xlim = c(324000, 355000),  # replace with your min/max x
