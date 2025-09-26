@@ -1059,17 +1059,17 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
    geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
    geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
    geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
-   geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
+  # geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
    #This adds in the points of the survey sites, shifted slightly to be not 
    #overlapping
      geom_point(overall_rls_data_final_minor_shifted, 
-              mapping = aes(x = longitude, y = latitude, fill = protection_status,
-                            shape = region), size = 3,
+              mapping = aes(x = longitude, y = latitude, fill = protection_status),
+              shape = 21, size = 3,
               colour = "black")+
    #This specifies the different shapes to be used to differentiate
    #between the different regions
    scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
-   scale_shape_manual(values = c(24, 21, 22, 23))+
+  # scale_shape_manual(values = c(24, 21, 22, 23))+
    #Specifies the colours for unprotected and protected sites
   # scale_fill_manual(values = c("black", "white"))+
        coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
