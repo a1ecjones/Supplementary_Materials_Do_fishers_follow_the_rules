@@ -1291,6 +1291,83 @@ ggsave("rec_boat_impacts_2km_mean.pdf", plot = rec_boat_impacts_2km_mean,
        width = 165, height = 130, units = "mm")
 ```
 
+
+## Figure 3: Boxplots of number of boats between protected and unprotected sites
+
+```{r Making a data frame with only unique rows for the sites}
+unique_site_df <- overall_rls_data_final%>%
+  distinct(site_code, protection_status, mean_rec_boat_counts_1km, mean_rec_boat_counts_1.5km,
+           mean_rec_boat_counts_2km)
+
+#Reordering the levels of protection status so unprotected is first
+unique_site_df$protection_status <- factor(unique_site_df$protection_status,
+                                           levels = c("unprotected", "protected"))
+
+unique_site_df$protection_status <- recode(unique_site_df$protection_status,
+                                           unprotected = "UP", protected = "P")
+```
+
+
+
+```{r Boxplot of mean rec boats between protection levels 1.5 km}
+(rec_boats_boxplot_1.5km <- ggplot(unique_site_df, aes(x = protection_status,
+                                                     y = mean_rec_boat_counts_1.5km,
+                                                     fill = protection_status))+
+  geom_boxplot(alpha = 0.6, width = 0.4)+
+   #Adding jittered raw data but only jittering on the x axis so it is the 
+   #true boat count values
+  geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
+  labs(x = "Protection Status", y = "Mean rec.\nboat counts")+
+     scale_fill_manual(values = c("#E95E48", "#355173"))+
+  theme.figure()+
+   theme(legend.position = "none",
+     #    axis.text.x = element_blank(),
+         axis.title.y = element_blank()))
+      #   axis.ticks.x = element_blank()))
+```
+
+```{r Boxplot of mean rec boats between protection levels 1 km}
+(rec_boats_boxplot_1km <- ggplot(unique_site_df, aes(x = protection_status,
+                                                     y = mean_rec_boat_counts_1km,
+                                                     fill = protection_status))+
+  geom_boxplot(alpha = 0.6, width = 0.4)+
+  geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
+  labs(x = "Protection Status", y = "Mean rec.\nboat counts")+
+     scale_fill_manual(values = c("#E95E48", "#355173"))+
+  theme.figure()+
+   theme(legend.position = "none"))
+     #    axis.text.x = element_blank(),
+         #axis.title.y = element_blank()))
+      #   axis.ticks.x = element_blank()))
+```
+
+```{r Boxplot of mean rec boats between protection levels 2 km}
+(rec_boats_boxplot_2km <- ggplot(unique_site_df, aes(x = protection_status,
+                                                     y = mean_rec_boat_counts_2km,
+                                                     fill = protection_status))+
+  geom_boxplot(alpha = 0.6, width = 0.4)+
+  geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
+  labs(x = "Protection Status", y = "Mean rec.\nboat counts",
+       fill = "Protection Status")+
+     scale_fill_manual(values = c("#E95E48", "#355173"))+
+  theme.figure()+
+   theme(legend.position = "none",
+     axis.title.y = element_blank()))
+```
+
+```{r Combining the three plots into one, fig.cap=Figure 4. Distributions of the mean number of recreational boats fishing (per year) within A) 1.0, B) 1.5, and C) 2.0 km of Reef Life Survey sites in Barkley Sound, BC, Canada, separated by protection-from-fishing status (NP = No Protection, P = Protected). Raw data are shown with grey circles and have been jittered across the x-axis for ease of viewing. Means were calculated from DFO flyover survey data of recreational fishing boat locations from 2021-23. Asterisks indicate level of significance based on Wilcoxon rank sum tests (* = P < 0.05, ** = P < 0.01, *** = P < 0.001).}
+rec_boats_overall_boxplots <- rec_boats_boxplot_1km + rec_boats_boxplot_1.5km + rec_boats_boxplot_2km
+
+rec_boats_overall_boxplots
+```
+
+This was imported to inkscape where labels for the radii used were added (1, 1.5, 2, from left to right). Also the x axis labels were edited to just be Np and P
+
+```{r Saving the rec boat counts boxplot figure}
+ggsave("rec_boats_boxplot_overall.pdf", plot = rec_boats_overall_boxplots,
+       path = here("./04_plots/manuscript_figures"), width = 180, height = 80, units = "mm")
+```
+
 # Appendix stuff
 
 ## DFO Flight path and methods for counting the boats
@@ -1992,6 +2069,10 @@ Given that the DFO data is novel and provides exciting opportunities to look at 
 ## Number of boats spotted within protected areas relative to total boats spotted
 
 ```{r Finding the number of boats spotted within protected areas}
+#Specifies to use the GEOS engine. Turns off the spherical geometry
+sf::sf_use_s2(FALSE)
+
+
 #This line loads in the recreational fishing boat data and converts the lat and
 #long to an sf object in the same CRS as the sf objects for the protected areas
 rec_boats_fishing_total_points_wgs84 <- st_as_sf(rec_boats_fishing_total, coords = c("Longitude", "Latitude"), crs = 4326)
@@ -2029,7 +2110,7 @@ total_boats_in_protected_areas <- total_boats_broken_group_RCA + total_boats_bae
   total_boats_numukamis + total_boats_folger_pass_RCA
 
 #This adds up all of the rec boats fishing that were spotted within Barkley 
-#Sound
+#Sound.
 total_boats_spotted_barkley <- sum(rec_boats_fishing_total$rec_boats_fishing)
 
 
