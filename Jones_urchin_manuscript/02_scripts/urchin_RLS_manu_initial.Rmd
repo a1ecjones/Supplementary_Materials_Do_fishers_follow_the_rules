@@ -22,6 +22,14 @@ library(lubridate)
 library(eks)
 library(tmap)
 library(patchwork)
+library(spatstat.geom)
+library(sparr)
+library(stars)
+library(raster)
+library(conflicted)
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -677,7 +685,7 @@ rec_boats_fishing2023 <- DFO_data_raw_2023%>%
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
 
 #Subsetting the dataframe to have points from only the region of interest
-rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.76511688 & Latitude <= 49.00508194 & 
+rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
 ```
 
@@ -715,7 +723,7 @@ rec_boats_fishing2022 <- DFO_data_raw_2022%>%
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
 
 #Subsetting the dataframe to have points from only the region of interest
-rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.76511688 & Latitude <= 49.00508194 & 
+rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
 ```
 
@@ -752,7 +760,7 @@ rec_boats_fishing2021 <- DFO_data_raw_2021%>%
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
 
 #Subsetting the dataframe to have points from only the region of interest
-rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.76511688 & Latitude <= 49.00508194 & 
+rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
 ```
 
@@ -2119,7 +2127,7 @@ percent_boats_in_protected_areas <- (total_boats_in_protected_areas/total_boats_
 ```
 
 
-## Further Kernel Analysis of the recreational boat locations
+## Further Kernel Analysis of the recreational boat locations (eks)
 
 To gain a better understanding of the spatial nature of the fishing pressure in Barkley Sound I am using a Kernel Density Estimation to produce some plots of the fishing pressure as a heatmap.
 
@@ -2168,7 +2176,7 @@ VI_base_layer_hi_res_sf_subset_projected <- st_transform(VI_base_layer_hi_res_sf
    geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
    geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
    geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
-   geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
+ #  geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
   geom_sf(data = st_get_contour(rec_boat_kde_overall),aes(fill=label_percent(contlabel)))+
   coord_sf(
     xlim = c(324000, 355000),  # replace with your min/max x
@@ -2233,6 +2241,198 @@ ggsave("three_year_rec_boat_KDE_maps.pdf", plot = three_years_rec_boats_kde_map,
        path = here("./04_plots/manuscript_figures"), width = 400, height = 200, units = "mm")
 ```
 
+
+
+
+
+## Kernel analysis with sparr package instead for more in depth control
+
+### Specifying the ocean area and removing the islands
+
+```{r Making ocean mask}
+#This makes a box of the area where the boat points that we are interested in 
+#are
+kde_study_area <- st_as_sfc(st_bbox(rec_boat_points_for_kde))
+kde_study_area_21 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_21))
+kde_study_area_22 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_22))
+kde_study_area_23 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_23))
+#This creates the ocean mask (i.e. the study area minus the land)
+ocean_mask <- st_difference(kde_study_area, st_union(VI_base_layer_hi_res_sf_subset_projected))
+ocean_mask_21 <- st_difference(kde_study_area_21, st_union(VI_base_layer_hi_res_sf_subset_projected))
+ocean_mask_22 <- st_difference(kde_study_area_22, st_union(VI_base_layer_hi_res_sf_subset_projected))
+ocean_mask_23 <- st_difference(kde_study_area_23, st_union(VI_base_layer_hi_res_sf_subset_projected))
+```
+
+### Converting points to spatstat ppp object type
+
+```{r Converting points into object that can be used for kde}
+#This converts the ocean mask into an owin object type. An owin is used by the
+#function that calculates the KDE as the area to look in.
+ocean_owin <- as.owin(ocean_mask)
+ocean_owin_21 <- as.owin(ocean_mask_21)
+ocean_owin_22 <- as.owin(ocean_mask_22)
+ocean_owin_23 <- as.owin(ocean_mask_23)
+
+#This converts the rec boat points into ppp object, and uses the ocean owin
+#as the boundary
+rec_boats_ppp <- as.ppp(st_coordinates(rec_boat_points_for_kde), W = ocean_owin)
+rec_boats_ppp_21 <- as.ppp(st_coordinates(rec_boat_points_for_kde_21), W = ocean_owin_21)
+rec_boats_ppp_22 <- as.ppp(st_coordinates(rec_boat_points_for_kde_22), W = ocean_owin_22)
+rec_boats_ppp_23 <- as.ppp(st_coordinates(rec_boat_points_for_kde_23), W = ocean_owin_23)
+```
+
+### Picking a pilot bandwidth value via oversmoothing algorithm function
+This will use the ppp object to estimate a bandwidth which we can use below as a starting point for the adaptive bandwidth estimation in the KDE function.
+
+```{r Estimating pilot bandwidth}
+#This will choose the optimal bandwidth for the rec boats kde
+rec_boat_overall_bandwidth <- OS(rec_boats_ppp)
+rec_boat_overall_bandwidth_21 <- OS(rec_boats_ppp_21)
+rec_boat_overall_bandwidth_22 <- OS(rec_boats_ppp_22)
+rec_boat_overall_bandwidth_23 <- OS(rec_boats_ppp_23)
+```
+
+### Running the KDE
+
+```{r Running the KDE}
+rec_boat_kde_overall_sparr <- bivariate.density(rec_boats_ppp,
+                                                h0 = rec_boat_overall_bandwidth,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+
+rec_boat_kde_overall_sparr_21 <- bivariate.density(rec_boats_ppp_21,
+                                                h0 = rec_boat_overall_bandwidth_21,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+
+rec_boat_kde_overall_sparr_22 <- bivariate.density(rec_boats_ppp_22,
+                                                h0 = rec_boat_overall_bandwidth_22,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+
+rec_boat_kde_overall_sparr_23 <- bivariate.density(rec_boats_ppp_23,
+                                                h0 = rec_boat_overall_bandwidth_23,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+```
+
+### Converting back to objects usable in ggplot
+
+```{r Converting the objects into forms usable in ggplot}
+#converting the spatstat im (image) object to raster
+rec_boat_kde_overall_rast <- raster(rec_boat_kde_overall_sparr$z)
+crs(rec_boat_kde_overall_rast) <- "EPSG:32610"
+
+rec_boat_kde_overall_rast_21 <- raster(rec_boat_kde_overall_sparr_21$z)
+crs(rec_boat_kde_overall_rast_21) <- "EPSG:32610"
+
+rec_boat_kde_overall_rast_22 <- raster(rec_boat_kde_overall_sparr_22$z)
+crs(rec_boat_kde_overall_rast_22) <- "EPSG:32610"
+
+rec_boat_kde_overall_rast_23 <- raster(rec_boat_kde_overall_sparr_23$z)
+crs(rec_boat_kde_overall_rast_23) <- "EPSG:32610"
+
+#Converting back into lat and long for plotting with the hakai shape file
+rec_boat_kde_overall_rast <-  projectRaster(rec_boat_kde_overall_rast, crs = CRS("+proj=longlat +datum=WGS84"))
+rec_boat_kde_overall_rast_21 <-  projectRaster(rec_boat_kde_overall_rast_21, crs = CRS("+proj=longlat +datum=WGS84"))
+rec_boat_kde_overall_rast_22 <-  projectRaster(rec_boat_kde_overall_rast_22, crs = CRS("+proj=longlat +datum=WGS84"))
+rec_boat_kde_overall_rast_23 <-  projectRaster(rec_boat_kde_overall_rast_23, crs = CRS("+proj=longlat +datum=WGS84"))
+
+#Converting into a dataframe for use with ggplot
+rec_boat_kde_overall_df <- as.data.frame(rec_boat_kde_overall_rast, xy = TRUE,
+                                         na.rm = TRUE)
+rec_boat_kde_overall_df_21 <- as.data.frame(rec_boat_kde_overall_rast_21, xy = TRUE,
+                                         na.rm = TRUE)
+rec_boat_kde_overall_df_22 <- as.data.frame(rec_boat_kde_overall_rast_22, xy = TRUE,
+                                         na.rm = TRUE)
+rec_boat_kde_overall_df_23 <- as.data.frame(rec_boat_kde_overall_rast_23, xy = TRUE,
+                                         na.rm = TRUE)
+```
+
+
+### Plotting the KDEs
+
+```{r Plotting the overall KDE}
+ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df, aes(x = x, y = y, fill = layer))+
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar())+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density", title = "Overall") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()
+```
+
+The plot is showing the density distribution of boats. Intensity is the average number of points (rec boats) per unit area. The density is proportionate to the intensity but is scaled so that all values sum to 1. The density surface is a probability density function of the rec boat data.
+
+```{r Plotting the 2021 KDE}
+ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df_21, aes(x = x, y = y, fill = layer))+
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar())+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density", title = "2021") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()
+```
+
+```{r Plotting the 2022 KDE}
+ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df_22, aes(x = x, y = y, fill = layer))+
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar())+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density", title = "2022") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()
+```
+
+```{r Plotting the 2023 KDE}
+ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df_23, aes(x = x, y = y, fill = layer))+
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar())+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density", title = "2023") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()
+```
 
 # Initial modelling
 
