@@ -687,6 +687,8 @@ rec_boats_fishing2023 <- DFO_data_raw_2023%>%
 #Subsetting the dataframe to have points from only the region of interest
 rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
+
+#48.996722
 ```
 
 
@@ -725,6 +727,8 @@ rec_boats_fishing2022 <- DFO_data_raw_2022%>%
 #Subsetting the dataframe to have points from only the region of interest
 rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
+
+#48.996722
 ```
 
 
@@ -762,6 +766,8 @@ rec_boats_fishing2021 <- DFO_data_raw_2021%>%
 #Subsetting the dataframe to have points from only the region of interest
 rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
+
+#48.996722
 ```
 
 
@@ -2307,7 +2313,8 @@ rec_boat_kde_overall_sparr <- bivariate.density(rec_boats_ppp,
                                                 edge = "diggle",
                                                 adapt = TRUE,
                                                 verbose = TRUE,
-                                                resolution = 250)
+                                                resolution = 250,
+                                                intensity = TRUE)
 
 rec_boat_kde_overall_sparr_21 <- bivariate.density(rec_boats_ppp_21,
                                                 h0 = rec_boat_overall_bandwidth_21,
@@ -2362,6 +2369,10 @@ rec_boat_kde_overall_df_22 <- as.data.frame(rec_boat_kde_overall_rast_22, xy = T
                                          na.rm = TRUE)
 rec_boat_kde_overall_df_23 <- as.data.frame(rec_boat_kde_overall_rast_23, xy = TRUE,
                                          na.rm = TRUE)
+
+
+#Converting the intensity to units of per km squared
+rec_boat_kde_overall_df$layer <- (rec_boat_kde_overall_df$layer * 1e6)
 ```
 
 
@@ -2372,15 +2383,13 @@ threshold_80 <- quantile(rec_boat_kde_overall_df$layer, 0.8, na.rm = TRUE)
 threshold_95 <- quantile(rec_boat_kde_overall_df$layer, 0.95, na.rm = TRUE)
 
 (overall_rec_boat_kde_sparr_map <- ggplot()+
-  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
   geom_raster(data = rec_boat_kde_overall_df, aes(x = x, y = y, fill = layer))+
-    geom_contour(
+   geom_contour(
     data = rec_boat_kde_overall_df,
     aes(x = x, y = y, z = layer),
     color = "red",      # line color
     size = 0.6,           # line thickness
     breaks = threshold_95          # number of contour levels (adjust as needed)
-
   ) +
    geom_contour(
     data = rec_boat_kde_overall_df,
@@ -2390,19 +2399,22 @@ threshold_95 <- quantile(rec_boat_kde_overall_df$layer, 0.95, na.rm = TRUE)
     breaks = threshold_80            # number of contour levels (adjust as needed)
   ) +
   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+      geom_sf(data = broken_group_RCA, fill = "white", colour ="white", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "white", colour = "white", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "white", colour = "white", alpha = 0.2)+
   scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
                        guide = guide_colorbar(barheight = unit(2.1, "cm")))+
      coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
-           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
     scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   labs(x = "Longitude", y = "Latitude", shape = "Region",
-       fill = "Recreational\nBoat Density") +
+       fill = "Recreational\nBoat Intensity") +
     annotation_scale(location = "bl", text_cex = 1.3,
                      text_col = "white",
                      line_col = "white")+
     theme.figure()+
     theme(legend.position = "inside",
-          legend.position.inside = c(0.87, 0.21),
+          legend.position.inside = c(0.856, 0.19),
           legend.title = element_text(size = 13),
           legend.text = element_text(size = 12),
           axis.text.y = element_text(angle = 45)))
@@ -2445,7 +2457,7 @@ threshold_95_21 <- quantile(rec_boat_kde_overall_df_21$layer, 0.95, na.rm = TRUE
   scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
                        guide = guide_colorbar(barheight = unit(2.1, "cm")))+
      coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
-           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
     scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   labs(x = "Longitude", y = "Latitude", shape = "Region",
        fill = "Recreational\nBoat Density") +
@@ -2454,7 +2466,7 @@ threshold_95_21 <- quantile(rec_boat_kde_overall_df_21$layer, 0.95, na.rm = TRUE
                      line_col = "white")+
   theme.figure()+
      theme(legend.position = "inside",
-          legend.position.inside = c(0.87, 0.21),
+          legend.position.inside = c(0.856, 0.19),
           legend.title = element_text(size = 13),
           legend.text = element_text(size = 12),
           axis.text.y = element_text(angle = 45)))
@@ -2494,7 +2506,7 @@ threshold_95_22 <- quantile(rec_boat_kde_overall_df_22$layer, 0.95, na.rm = TRUE
   scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
                        guide = guide_colorbar(barheight = unit(2.1, "cm")))+
      coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
-           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
     scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   labs(x = "Longitude", y = "Latitude", shape = "Region",
        fill = "Recreational\nBoat Density") +
@@ -2503,7 +2515,7 @@ threshold_95_22 <- quantile(rec_boat_kde_overall_df_22$layer, 0.95, na.rm = TRUE
                      line_col = "white")+
   theme.figure()+
          theme(legend.position = "inside",
-          legend.position.inside = c(0.87, 0.21),
+          legend.position.inside = c(0.856, 0.19),
           legend.title = element_text(size = 13),
           legend.text = element_text(size = 12),
           axis.text.y = element_text(angle = 45)))
@@ -2542,7 +2554,7 @@ threshold_95_23 <- quantile(rec_boat_kde_overall_df_23$layer, 0.95, na.rm = TRUE
   scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
                        guide = guide_colorbar(barheight = unit(2.1, "cm")))+
      coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
-           ylim = c(lat_min + 0.02, lat_max - 0.04))+
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
     scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
   labs(x = "Longitude", y = "Latitude", shape = "Region",
        fill = "Recreational\nBoat Density") +
@@ -2551,7 +2563,7 @@ threshold_95_23 <- quantile(rec_boat_kde_overall_df_23$layer, 0.95, na.rm = TRUE
                      line_col = "white")+
   theme.figure()+
        theme(legend.position = "inside",
-          legend.position.inside = c(0.87, 0.21),
+          legend.position.inside = c(0.856, 0.19),
           legend.title = element_text(size = 13),
           legend.text = element_text(size = 12),
           axis.text.y = element_text(angle = 45)))
