@@ -27,6 +27,7 @@ library(stars)
 library(raster)
 library(conflicted)
 library(metR)
+library(glmmTMB)
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
@@ -1431,41 +1432,6 @@ ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_202
 ```
 
 
-## Set up for doing spatial analyses on the data
-
-### Adding columns of projected coordinates for the sites
-
-```{r Adding a column of projected locations for the sites}
-#changing the data frame to have the coordinates as a geometry type in WGS84
-overall_rls_data_final_geo <- st_as_sf(overall_rls_data_final, 
-                                       coords = c("longitude", "latitude"),
-                                       crs = 4326)
-#converting the coordinates to a projection from around Vancouver Island
-overall_rls_data_final_proj <- st_transform(overall_rls_data_final_geo, crs = 32610)
-
-#Extracting the projected coordinates
-coords_utm <- st_coordinates(overall_rls_data_final_proj)
-
-#adding the projected coordinates to the main data frame
-overall_rls_data_final$easting <- coords_utm[,1]
-overall_rls_data_final$northing <- coords_utm[,2]
-
-#adding columns with the data in km
-overall_rls_data_final$easting_km <- overall_rls_data_final$easting / 1000
-overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
-```
-
-### Making a mesh of the sites
-
-```{r Creating a mesh of the RLS sites}
-mesh_RLS <- make_mesh(overall_rls_data_final, xy_cols = c("easting_km", "northing_km"),
-                      cutoff = 5)
-
-plot(mesh_RLS)
-```
-
-
-
 # Doing some pre-testing of the data to see what interesting trends there are
 
 ## Looking at the fish data
@@ -2580,6 +2546,217 @@ ggsave("rec_boat_KDE_sparr_23_map.png", plot = rec_boat_kde_sparr_map_23,
 # Initial modelling
 
 I will be using the sdmTMB package to create models looking at the abundances/densities of urchins, fish, and other invertebrates at the RLS sites within Barkley Sound. The models will be based on the protection status of the survey sites as the predictor variable.
+
+## Set up for doing spatial analyses on the data
+
+### Adding columns of projected coordinates for the sites
+
+```{r Adding a column of projected locations for the sites}
+#changing the data frame to have the coordinates as a geometry type in WGS84
+overall_rls_data_final_geo <- st_as_sf(overall_rls_data_final, 
+                                       coords = c("longitude", "latitude"),
+                                       crs = 4326)
+#converting the coordinates to a projection from around Vancouver Island
+overall_rls_data_final_proj <- st_transform(overall_rls_data_final_geo, crs = 32610)
+#Making a df with only unique projected sites
+unique_overall_rls_data_final_proj <- overall_rls_data_final_proj%>%
+  distinct(site_code, site_name, geometry)
+
+#Extracting the projected coordinates
+coords_utm <- st_coordinates(overall_rls_data_final_proj)
+
+#adding the projected coordinates to the main data frame
+overall_rls_data_final$easting <- coords_utm[,1]
+overall_rls_data_final$northing <- coords_utm[,2]
+
+#adding columns with the data in km
+overall_rls_data_final$easting_km <- overall_rls_data_final$easting / 1000
+overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
+
+#Making another df with only the unique sites for the mesh
+#### We tested this and the mesh is the same as when they are multiple rows
+#for each site
+#unique_overall_rls_data_final <- overall_rls_data_final%>%
+#  distinct(site_code, northing_km, easting_km)
+```
+
+### Making a mesh of the sites
+
+```{r Figuring out the average distance between study sites}
+dist_mat <- st_distance(unique_overall_rls_data_final_proj)      # returns units (meters)
+dist_mat_m <- matrix(as.numeric(dist_mat), nrow = nrow(unique_overall_rls_data_final_proj), ncol = nrow(unique_overall_rls_data_final_proj))
+
+# 4a) mean of all unique pairwise distances (i<j)
+n_dist <- nrow(dist_mat_m)
+pair_inds <- which(upper.tri(dist_mat_m))
+mean_pairwise <- mean(dist_mat_m[pair_inds], na.rm = TRUE)
+mean_pairwise
+```
+
+
+```{r Creating a mesh of the RLS sites}
+mesh_RLS <- make_mesh(overall_rls_data_final,
+                      xy_cols = c("easting_km", "northing_km"),
+                      type = "cutoff",
+                      cutoff = 1)
+
+plot(mesh_RLS)
+```
+
+I am starting with a mesh cutoff of 1 km as distances larger than this resulted in very large triangle sizes and little to no boundary around the study sites. A cutoff smaller than one results in many small triangles with small inner angles.
+
+## Fish Modelling
+
+### Fish abundance model
+
+The first model that I will attempt to construct will be looking at the abundance of fish between protected and unprotected sites.
+
+#### Looking at distributions of total fish abundance 
+
+```{r Looking at distribution of total fish abundance}
+hist(overall_rls_data_final$total_fish)
+
+unprotected_total_fish <- overall_rls_data_final%>%
+  filter(protection_status == "unprotected")
+hist(unprotected_total_fish$total_fish)
+
+protected_total_fish <- overall_rls_data_final%>%
+  filter(protection_status == "protected")
+hist(protected_total_fish$total_fish)
+```
+
+#### Fish ab no spatial
+
+```{r Fish abundance no spatial}
+fish_ab_no_spatial <- sdmTMB(
+  data = overall_rls_data_final,
+  formula = total_fish ~ protection_status,
+  mesh = mesh_RLS,
+  family = nbinom1(link = "log"),
+  spatial = "off"
+)
+
+fish_ab_no_spatial
+sanity(fish_ab_no_spatial)
+
+tidy(fish_ab_no_spatial, conf.int = TRUE)
+```
+
+```{r Fish ab no spatial model fit}
+fish_ab_no_spatial_resids <- residuals(fish_ab_no_spatial)
+qqnorm(fish_ab_no_spatial_resids)
+qqline(fish_ab_no_spatial_resids)
+```
+
+Residuals look quite bad for no spatial
+
+
+#### Fish ab spatial
+
+```{r Fish abundance spatial}
+fish_ab_spatial <- sdmTMB(
+  data = overall_rls_data_final,
+  formula = total_fish ~ protection_status,
+  mesh = mesh_RLS,
+  family = nbinom2(link = "log"),
+  spatial = "on"
+)
+
+fish_ab_spatial
+sanity(fish_ab_spatial)
+
+tidy(fish_ab_spatial, "ran_pars",conf.int = TRUE)
+```
+
+
+```{r Fish ab spatial model fit}
+set.seed(123)
+fish_ab_spatial_resids <- residuals(fish_ab_spatial, type = "mle-mvn")
+fish_ab_spatial_resids <- fish_ab_spatial_resids[is.finite(fish_ab_spatial_resids)]
+qqnorm(fish_ab_spatial_resids);abline(0, 1)
+#qqline(fish_ab_spatial_resids)
+
+
+sim_fish_ab_spatial_resids <- simulate(fish_ab_spatial, nsim = 500, type = "mle-mvn")
+r_fish_ab_spatial<- dharma_residuals(sim_fish_ab_spatial_resids, fish_ab_spatial, return_DHARMa = TRUE)
+plot(r_fish_ab_spatial)
+DHARMa::testResiduals(r_fish_ab_spatial)
+```
+
+Residuals also look quite bad for the spatial model. Possibly poisson is not correct.
+
+
+#### Fish ab spatiotemp
+
+```{r Fish abundance spatiotemporal}
+fish_ab_spatiotemp <- sdmTMB(
+  data = overall_rls_data_final,
+  formula = total_fish ~ protection_status,
+  mesh = mesh_RLS,
+  family = nbinom2(link = "log"),
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "AR1"
+)
+
+fish_ab_spatiotemp
+sanity(fish_ab_spatiotemp)
+
+tidy(fish_ab_spatiotemp, conf.int = TRUE)
+```
+
+
+```{r Fish ab spatiotemp model fit}
+set.seed(123)
+fish_ab_spatiotemp_resids <- residuals(fish_ab_spatiotemp, type = "mle-mvn")
+fish_ab_spatiotemp_resids <- fish_ab_spatiotemp_resids[is.finite(fish_ab_spatiotemp_resids)]
+qqnorm(fish_ab_spatiotemp_resids);abline(0, 1)
+#qqline(fish_ab_spatial_resids)
+
+
+sim_fish_ab_spatiotemp_resids <- simulate(fish_ab_spatiotemp, nsim = 500, type = "mle-mvn")
+r_fish_ab_spatiotemp<- dharma_residuals(sim_fish_ab_spatiotemp_resids, fish_ab_spatiotemp, return_DHARMa = TRUE)
+plot(r_fish_ab_spatiotemp)
+DHARMa::testResiduals(r_fish_ab_spatiotemp)
+```
+
+
+
+```{r}
+visreg::visreg(fish_ab_spatiotemp, xvar = "protection_status")
+```
+
+For fish total abundance the model with negative binomial (2) family is showing good fitting. We will therefore continue with this model. I have tested multiple different cutoffs for the mesh and they do seem to change whether or not the residuals are fitting well. Using a cutoff of 1 appears to produce the best model fit so I will continue with that and will look more into mesh cutoff selection.
+
+
+#### Fish ab spatial glmm
+
+```{r Fish ab spatial glmm model}
+fish_ab_spatial_glmm <- glmmTMB(
+  data = overall_rls_data_final,
+  formula = total_fish ~ protection_status + (1|site_code) + (1|year) +
+    ,
+  family = glmmTMB::nbinom2(link = "log")
+)
+
+fish_ab_spatial_glmm
+summary(fish_ab_spatial_glmm)
+
+
+fish_ab_spatial_glmm_resids <- residuals(fish_ab_spatial_glmm)
+qqnorm(fish_ab_spatial_glmm_resids)
+```
+
+
+
+```{r Testing if including protection status improves the model}
+AIC(fish_ab_spatiotemp,
+    fish_ab_spatiotemp_null)%>%
+  arrange(AIC)%>%
+  mutate(delta_AIC = AIC - AIC[1])
+```
+
+
 
 ## Urchin Modelling
 
