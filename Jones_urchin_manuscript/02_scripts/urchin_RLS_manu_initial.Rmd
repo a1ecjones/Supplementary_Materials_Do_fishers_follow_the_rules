@@ -28,6 +28,7 @@ library(raster)
 library(conflicted)
 library(metR)
 library(glmmTMB)
+library(DHARMa)
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
@@ -75,6 +76,9 @@ After checking it appears that the cryptic fish and mobile fish csv files need t
 ```{r Combining the three DFs}
 overall_rls_data_raw <- rbind(cryptobenthic_fish_data_raw, macroinvert_data_raw,
                               mobile_fish_data_raw)
+
+overall_rls_data_raw$reporting_name <- as.factor(overall_rls_data_raw$reporting_name)
+species_list <- levels(overall_rls_data_raw$reporting_name)
 ```
 
 
@@ -180,6 +184,18 @@ overall_rls_data_raw_wide <- overall_rls_data_raw_lat_long_updated_names%>%
   group_by(site_code, site_name, latitude, longitude, survey_date, depth, reporting_name)%>%
   summarise(site_count = sum(total))
 
+
+overall_rls_data_raw_wide$reporting_name <- as.character(overall_rls_data_raw_wide$reporting_name)
+
+
+#Replacing the NAs
+#The Embiotocidae one
+overall_rls_data_raw_wide$reporting_name[is.na(overall_rls_data_raw_wide$reporting_name) &
+                                           overall_rls_data_raw_wide$site_code == "BMSC11"] <- "Embiotocidae spp."
+#The percidae one
+overall_rls_data_raw_wide$reporting_name[is.na(overall_rls_data_raw_wide$reporting_name) &
+                                           overall_rls_data_raw_wide$site_code == "BMSC6"] <- "Percidae spp."
+
 overall_rls_data_raw_wide$reporting_name <- as.factor(overall_rls_data_raw_wide$reporting_name)
 
 overall_rls_data_raw_wide <- overall_rls_data_raw_wide%>%
@@ -209,12 +225,15 @@ mutate(protection_status = case_when(
   site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
 ))
 
-overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 181,
-                                                    seq(7, 180, by = 1))]
+overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182,
+                                                    seq(7, 181, by = 1))]
+
+##print(unique(overall_rls_data_clean$reporting_name))
 
 overall_rls_data_clean$site_code <- as.factor(overall_rls_data_clean$site_code)
 overall_rls_data_clean$site_name <- as.factor(overall_rls_data_clean$site_name)
 overall_rls_data_clean$protection_status <- as.factor(overall_rls_data_clean$protection_status)
+
 ```
 
 
@@ -236,7 +255,8 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
            Pholis_ornata + Pleuronichthys_coenosus + Porichthys_notatus + Rhacochilus_vacca +
            Rhamphocottus_richardsonii + Rhinogobiops_nicholsii + Rhinogobiops_nicholsii +
            Scorpaenichthys_marmoratus + Sebastes_caurinus + Sebastes_flavidus + Sebastes_maliger + Sebastes_melanops +
-           Sebastes_nebulosus + Sebastes_pinniger + Sebastes_spp. + Synchirus_gilli + Zalophus_californianus,
+           Sebastes_nebulosus + Sebastes_pinniger + Sebastes_spp. + Synchirus_gilli + Zalophus_californianus + Percidae_spp.+
+           Embiotocidae_spp.,
          total_rockfish = Sebastes_spp. + Sebastes_pinniger + Sebastes_caurinus + Sebastes_maliger + Sebastes_melanops +
            Sebastes_nebulosus + Sebastes_flavidus,
          total_mesograzers = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
@@ -497,13 +517,22 @@ overall_rls_data_expanded <- overall_rls_data_expanded%>%
     kelp %in% c("Forest", "Understory") ~ "Present",
     kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
   ))
+
+overall_rls_data_expanded$reporting_name <- as.character(overall_rls_data_expanded$reporting_name)
+#Replacing the NAs
+#The Embiotocidae one
+overall_rls_data_expanded$reporting_name[is.na(overall_rls_data_expanded$reporting_name) &
+                                          overall_rls_data_expanded$site_code == "BMSC11"] <- "Embiotocidae spp."
+#The percidae one
+overall_rls_data_expanded$reporting_name[is.na(overall_rls_data_expanded$reporting_name) &
+                                           overall_rls_data_expanded$site_code == "BMSC6"] <- "Percidae spp."
 ```
 
 
 ## Making a df for plotting community composition
 
 ```{r}
-overall_rls_data_expanded_with_all_species <- overall_rls_data_raw_lat_long%>%
+overall_rls_data_expanded_with_all_species <- overall_rls_data_raw_lat_long_updated_names%>%
   uncount(total)
 
 
@@ -549,6 +578,10 @@ overall_rls_data_expanded_with_all_species <- overall_rls_data_expanded_with_all
     kelp %in% c("Forest", "Understory") ~ "Present",
     kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
   ))
+
+
+#This DF has 166 species, because there is still an NA that hasn't been 
+#addressed that becomes 2 species
 ```
 
 ## Making a df for plotting community comp without urchins
@@ -2047,6 +2080,14 @@ ggsave("mesograzer_abundance_no_urchins.pdf", plot = mesograzer_abundance_no_urc
 ```
 
 
+## Looking at trends in the abalone data
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Haliotis_kamtschatkana))+
+ geom_boxplot()
+ # geom_point()
+```
+
 
 
 # Doing further analysis of the DFO boat data
@@ -2632,7 +2673,7 @@ fish_ab_no_spatial <- sdmTMB(
   data = overall_rls_data_final,
   formula = total_fish ~ protection_status,
   mesh = mesh_RLS,
-  family = nbinom1(link = "log"),
+  family = sdmTMB::nbinom1(link = "log"),
   spatial = "off"
 )
 
@@ -2693,7 +2734,7 @@ fish_ab_spatiotemp <- sdmTMB(
   data = overall_rls_data_final,
   formula = total_fish ~ protection_status,
   mesh = mesh_RLS,
-  family = nbinom2(link = "log"),
+  family = sdmTMB::nbinom2(link = "log"),
   spatial = "on",
   time = "year",
   spatiotemporal = "AR1"
@@ -2728,34 +2769,244 @@ visreg::visreg(fish_ab_spatiotemp, xvar = "protection_status")
 
 For fish total abundance the model with negative binomial (2) family is showing good fitting. We will therefore continue with this model. I have tested multiple different cutoffs for the mesh and they do seem to change whether or not the residuals are fitting well. Using a cutoff of 1 appears to produce the best model fit so I will continue with that and will look more into mesh cutoff selection.
 
+```{r Looking at predictor significance}
+summary(fish_ab_spatiotemp$sd_report, select = "fixed", p.value = TRUE)
+```
+We can see by the p value for the second row that protection status is not a significant predictor of total fish abundance at a site.
 
-#### Fish ab spatial glmm
 
-```{r Fish ab spatial glmm model}
-fish_ab_spatial_glmm <- glmmTMB(
-  data = overall_rls_data_final,
-  formula = total_fish ~ protection_status + (1|site_code) + (1|year) +
-    ,
-  family = glmmTMB::nbinom2(link = "log")
+
+
+### Fish maximum size model
+The next model I will attempt to fit will be looking at whether protection status predicts the max size of fish species in the data.
+
+#### Assembling a data frame that consists of the maximum size of each fish species across all transects
+
+```{r Making a df with max size for each fish species}
+max_fish_size_df <- overall_rls_data_expanded%>%
+  group_by(reporting_name)%>%
+  filter(size_class == max(size_class, na.rm = TRUE))%>%
+  ungroup()%>%
+  filter(!reporting_name %in% c("Actinopterygii spp.", "Cottid spp.", "Pholis",
+                                "Anoplarchus", "Embiotocidae spp.", "Hemilepidotus",
+                                "Hexagrammos", "Percidae spp.", "Sebastes spp."))
+```
+
+
+#### Starting modelling the max fish sizes
+There are two potential ways to try modelling this. One with sdmTMB again and one with a normal glm with site as a random effect. I will start with the normal glm as not all sites in the dataset will be represented in the new dataset.
+
+```{r Max fish size spatiotemp}
+max_fish_size <- glmmTMB(
+  data = max_fish_size_df,
+  formula = size_class ~ protection_status + (1|reporting_name) + (1|site_code),
+  family = glmmTMB::tweedie(link = "log")
 )
 
-fish_ab_spatial_glmm
-summary(fish_ab_spatial_glmm)
+max_fish_size_resids <- simulateResiduals(max_fish_size)
+plot(max_fish_size_resids)
+```
 
 
-fish_ab_spatial_glmm_resids <- residuals(fish_ab_spatial_glmm)
-qqnorm(fish_ab_spatial_glmm_resids)
+### Species specific to protected or unprotected areas
+
+#### Identifying the species specific to the protection classifications
+
+```{r Making lists of species only found at protected unprotected or both}
+#Start by making df with only protected observations
+species_present_protected <- overall_rls_data_expanded_with_all_species%>%
+filter(protection_status == "protected")
+
+#Change species name to character for later functions
+species_present_protected$reporting_name <- as.character(species_present_protected$reporting_name)
+#Replacing the reporting name of NA for the perch with Percidae
+species_present_protected$reporting_name <- replace_na(species_present_protected$reporting_name,
+                                                       "Percidae spp.")
+#Making a list with the unique species names in the protected df. So it is a 
+#list with only species that are present in protected areas
+species_present_protected_list <- unique(species_present_protected$reporting_name)
+
+#Start by making a df with only unprotected observations
+species_present_unprotected <- overall_rls_data_expanded_with_all_species%>%
+  filter(protection_status == "unprotected")
+#Change species name to character for later functions
+species_present_unprotected$reporting_name <- as.character(species_present_unprotected$reporting_name)
+#Replacing the NA with Embiotocidae
+species_present_unprotected$reporting_name <- replace_na(species_present_unprotected$reporting_name,
+                                                         "Embiotocidae spp.")
+#Making a list with the unique species names in the unprotected df. So it is a 
+#list with only species that are present in unprotected areas
+species_present_unprotected_list <- unique(species_present_unprotected$reporting_name)
+
+
+#Now that we have found the species found in either protected or unprotected
+#sites we will see the differences in the lists to identify the ones only
+#found in one or the other
+
+#This identifies species only found in the protected list
+species_only_protected <- setdiff(species_present_protected_list, species_present_unprotected_list)
+print(species_only_protected)
+
+#Species only in the unprotected list
+species_only_unprotected <- setdiff(species_present_unprotected_list, species_present_protected_list)
+print(species_only_unprotected)
+
+#Species that are found in both lists
+species_both <- base::intersect(species_present_protected_list, species_present_unprotected_list)
+print(species_both)
+
+#Confirming that all three groups sum to 167 which is the total species number present
+length(species_only_protected) + length(species_only_unprotected) + length(species_both)
+
+
+#Making a .csv with the species listed by group
+max_length_sp <- max(length(species_both), length(species_only_protected), length(species_only_unprotected))
+length(species_both) <- max_length_sp
+length(species_only_protected) <- max_length_sp
+length(species_only_unprotected) <- max_length_sp
+
+species_categories_for_csv <- tibble(species_both = species_both, 
+                                     species_only_protected = species_only_protected, 
+                                     species_only_unprotected = species_only_unprotected)
+
+write_csv(species_categories_for_csv, here("./03_clean_data/species_categories.csv"))
 ```
 
 
 
-```{r Testing if including protection status improves the model}
-AIC(fish_ab_spatiotemp,
-    fish_ab_spatiotemp_null)%>%
-  arrange(AIC)%>%
-  mutate(delta_AIC = AIC - AIC[1])
+#### Creating a dataframe that will allow plotting of the species occurrences between protection status
+
+```{r Making DF for species specificity plot}
+sp_specificity_data <- overall_rls_data_raw_lat_long_updated_names%>%
+  select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude", "geom"))%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+
+sp_specificity_data$site_code <- as.factor(sp_specificity_data$site_code)
+sp_specificity_data$site_name <- as.factor(sp_specificity_data$site_name)
+sp_specificity_data$protection_status <- as.factor(sp_specificity_data$protection_status)
+
+
+#Extracting the year from the date column and then making a new column called
+#year
+sp_specificity_data$year <- format(sp_specificity_data$survey_date, "%Y")
+
+sp_specificity_data$year <- as.numeric(sp_specificity_data$year)
+
+#Adding columns for site kelp characteristics
+sp_specificity_data <- sp_specificity_data%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+
+
+#Replacing the NAs
+#The Embiotocidae one
+sp_specificity_data$reporting_name[is.na(sp_specificity_data$reporting_name) &
+                                          sp_specificity_data$site_code == "BMSC11"] <- "Embiotocidae spp."
+#The percidae one
+sp_specificity_data$reporting_name[is.na(sp_specificity_data$reporting_name) &
+                                           sp_specificity_data$site_code == "BMSC6"] <- "Percidae spp."
+
+
+
+#Calculating the total number of each species per transect
+sp_specificity_data <- sp_specificity_data%>%
+  group_by(site_code, survey_date, depth, protection_status, reporting_name)%>%
+  summarise(site_total = sum(total))
+
+#Counting how many transects each species was spotted at in each protection 
+#status
+sp_specificity_data_sp_transect_count <- sp_specificity_data%>%
+  group_by(reporting_name, protection_status)%>%
+  summarise(n_transects = n_distinct(interaction(site_code, survey_date, depth)),
+            .groups = "drop")
+
+#Counting how many transects of each protection status
+transect_counts_df <- sp_specificity_data%>%
+  group_by(protection_status)%>%
+  summarise(total_transects = n_distinct(interaction(site_code, survey_date, depth)),
+            .groups = "drop")
+
+#Combining the two data frames
+sp_specificity_data_final_props <- sp_specificity_data_sp_transect_count %>%
+  complete(reporting_name, protection_status, fill = list(n_transects = 0))%>%
+  left_join(transect_counts_df, by = "protection_status") %>%
+  mutate(prop_transects = n_transects / total_transects)
+
+
+#Species categories (only protected etc.)
+species_categories <- sp_specificity_data_final_props%>%
+  group_by(reporting_name)%>%
+  summarise(
+    protected_present = any(protection_status == "protected" & prop_transects > 0),
+    unprotected_present = any(protection_status == "unprotected" & prop_transects > 0)
+  )%>%
+  mutate(category = case_when(protected_present & unprotected_present ~ "Both",
+                              protected_present & !unprotected_present ~ "Protected Only",
+                              !protected_present & unprotected_present ~ "Unprotected Only"))
+
+#Merging the categories into the plotting data
+sp_specificity_data_final_props <- sp_specificity_data_final_props%>%
+  left_join(species_categories%>%
+              select(reporting_name, category), by = "reporting_name")
+
+#Ordering the species by category
+sp_specificity_data_ordered <- sp_specificity_data_final_props%>%
+  arrange(factor(category, levels = c("Both", "Unprotected Only", "Protected Only")),
+          desc(prop_transects))%>%
+  pull(reporting_name)%>%
+  unique()
 ```
 
+
+#### Creating a plot to visualize the data
+To visualize this data, we will have a list of species with a bar to the right. The bar will represent average transect density or number of times they were spotted on a transect for each species, and will be shaded by protection status.
+
+```{r}
+(sp_specificity_plot <- ggplot(sp_specificity_data_final_props, aes(
+  x = prop_transects,
+  y = factor(reporting_name, levels = sp_specificity_data_ordered),
+  fill = protection_status
+)) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    x = "Proportion of transects observed",
+    y = "Species",
+    fill = "Protection status"
+  ) +
+  theme(
+    axis.text.y = element_text(face = "italic"),
+    legend.position = "top"
+  )+
+  theme.figure())
+```
+
+```{r}
+ggsave("sp_specificity_plot.pdf", plot = sp_specificity_plot,
+       path = here("./04_plots/manuscript_figures"), width = 210, height = 800, units = "mm")
+```
 
 
 ## Urchin Modelling
