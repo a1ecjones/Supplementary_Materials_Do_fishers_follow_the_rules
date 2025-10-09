@@ -2699,7 +2699,7 @@ fish_ab_spatial <- sdmTMB(
   data = overall_rls_data_final,
   formula = total_fish ~ protection_status,
   mesh = mesh_RLS,
-  family = nbinom2(link = "log"),
+  family = sdmTMB::nbinom2(link = "log"),
   spatial = "on"
 )
 
@@ -2784,29 +2784,128 @@ The next model I will attempt to fit will be looking at whether protection statu
 
 ```{r Making a df with max size for each fish species}
 max_fish_size_df <- overall_rls_data_expanded%>%
-  group_by(reporting_name)%>%
-  filter(size_class == max(size_class, na.rm = TRUE))%>%
+  group_by(site_code, site_name, survey_date, depth, year, protection_status, reporting_name, latitude, longitude)%>%
+  summarise(max_length = max(size_class, na.rm = TRUE),
+            .groups = "drop")%>%
   ungroup()%>%
   filter(!reporting_name %in% c("Actinopterygii spp.", "Cottid spp.", "Pholis",
                                 "Anoplarchus", "Embiotocidae spp.", "Hemilepidotus",
-                                "Hexagrammos", "Percidae spp.", "Sebastes spp."))
+                                "Hexagrammos", "Percidae spp.", "Sebastes spp."))%>%
+  #Converting the observations where the max length was 0 to 1 cm
+  mutate(max_length = if_else(max_length == 0, 1, max_length))
+
+max_fish_size_df$reporting_name <- as.factor(max_fish_size_df$reporting_name)
+```
+
+
+```{r}
+ggplot(max_fish_size_df, aes(x = protection_status, y = max_length))+
+  geom_boxplot()
+```
+
+
+```{r Making a df so that I can use sdmTMB for the model}
+max_fish_size_df_coords <- st_as_sf(max_fish_size_df, coords = c("longitude", "latitude"), crs = 4326)
+max_fish_size_df_coords <- st_transform(max_fish_size_df_coords, 32610)
+
+max_fish_size_df_coords_extracted <- st_coordinates(max_fish_size_df_coords)
+max_fish_size_df$easting <- max_fish_size_df_coords_extracted[,1]
+max_fish_size_df$northing <- max_fish_size_df_coords_extracted[,2]
+max_fish_size_df$easting_km <- max_fish_size_df$easting / 1000
+max_fish_size_df$northing_km <- max_fish_size_df$northing / 1000
+```
+
+```{r Making a mesh with the new data}
+mesh_RLS_max_size <- make_mesh(max_fish_size_df,
+                      xy_cols = c("easting_km", "northing_km"),
+                      type = "cutoff",
+                      cutoff = 1)
+
+plot(mesh_RLS_max_size)
 ```
 
 
 #### Starting modelling the max fish sizes
 There are two potential ways to try modelling this. One with sdmTMB again and one with a normal glm with site as a random effect. I will start with the normal glm as not all sites in the dataset will be represented in the new dataset.
 
-```{r Max fish size spatiotemp}
-max_fish_size <- glmmTMB(
-  data = max_fish_size_df,
-  formula = size_class ~ protection_status + (1|reporting_name) + (1|site_code),
-  family = glmmTMB::tweedie(link = "log")
-)
+##### Testing the distribution of max sizes
 
-max_fish_size_resids <- simulateResiduals(max_fish_size)
-plot(max_fish_size_resids)
+```{r Distribution of max sizes}
+hist(max_fish_size_df$max_length)
+
+car::leveneTest(max_length ~ protection_status, max_fish_size_df)
 ```
 
+##### Max size no spatial
+
+```{r Max fish size no_spatial}
+max_fish_size_no_spatial <- glmmTMB(
+  data = max_fish_size_df,
+  formula = max_length ~ protection_status + (1| reporting_name),
+  family = glmmTMB::nbinom2()
+)
+
+
+max_fish_size_no_spatial
+#sanity(max_fish_size_no_spatial)
+#tidy(max_fish_size_no_spatial, conf.int = TRUE)
+```
+
+```{r Max size no spatial model fit}
+set.seed(23214)
+max_fish_size_no_spatial_resids <- residuals(max_fish_size_no_spatial)
+#max_fish_size_no_spatial_resids <- max_fish_size_no_spatial_resids[is.finite(max_fish_size_no_spatial_resids)]
+qqnorm(max_fish_size_no_spatial_resids)
+qqline(max_fish_size_no_spatial_resids)
+```
+Residuals improved by going to nbinom2 family but still not looking great. Will try adding spatial next.
+
+##### Max size spatial
+
+```{r Max fish size spatial}
+#max_fish_size_spatial <- glmmTMB(
+#  data = max_fish_size_df,
+#  formula = max_length ~ protection_status + (1|site_code) + (1|year),
+##  family = Gamma(link = "log"),
+#)
+
+
+#max_fish_size_spatial
+#sanity(max_fish_size_spatial)
+#tidy(max_fish_size_spatial, conf.int = TRUE)
+
+
+
+max_fish_size_spatial <- sdmTMB(
+  data = max_fish_size_df,
+  formula = max_length ~ protection_status + (1|reporting_name),
+  family = sdmTMB::nbinom2(),
+  mesh = mesh_RLS_max_size,
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "AR1"
+)
+
+
+max_fish_size_spatial
+sanity(max_fish_size_spatial)
+tidy(max_fish_size_spatial, conf.int = TRUE)
+```
+
+
+```{r Max size spatial model fit}
+set.seed(345983)
+max_fish_size_spatial_resids <- residuals(max_fish_size_spatial, type = "mle-mvn")
+max_fish_size_spatial_resids <- max_fish_size_spatial_resids[is.finite(max_fish_size_spatial_resids)]
+qqnorm(max_fish_size_spatial_resids);abline(0, 1)
+#qqline(max_fish_size_spatial_resids)
+
+
+sim_max_fish_size_spatial_resids <- simulate(max_fish_size_spatial, nsim = 500, type = "mle-mvn")
+r_max_fish_size_spatial<- dharma_residuals(sim_max_fish_size_spatial_resids, max_fish_size_spatial, return_DHARMa = TRUE)
+plot(r_max_fish_size_spatial)
+DHARMa::testResiduals(r_max_fish_size_spatial)
+```
 
 ### Species specific to protected or unprotected areas
 
@@ -3011,51 +3110,105 @@ ggsave("sp_specificity_plot.pdf", plot = sp_specificity_plot,
 
 ## Urchin Modelling
 
-I will be starting with a model looking at the number of urchins overall at the different sites, and then I will make specific models for each of the three main urchin species. 
+I will be starting with a model looking at the red sea urchins only, as preliminary analyses show that the numbers of other urchin species are neglible compared to the red urchins.
 
 I will try with a few different likely distributional families and then see which one fits the data the best.
 
-### Tweedie
+### Looking at urchin distribution
+```{r}
+hist(overall_rls_data_final$Mesocentrotus_franciscanus)
+hist(protected_total_fish$Mesocentrotus_franciscanus)
+hist(unprotected_total_fish$Mesocentrotus_franciscanus)
+```
+
+
+### Urchin model no spatial
 
 ```{r Urchin model}
-urch_mod <- sdmTMB(total_urchins ~ protection_status,
+urch_mod_no_spatial <- sdmTMB(Mesocentrotus_franciscanus ~ protection_status,
                    data = overall_rls_data_final,
                    mesh = mesh_RLS,
-                   family = tweedie(link = "log"),
-                   spatial = "on",
-                   spatiotemporal = "off")
-urch_mod
+                   family = sdmTMB::nbinom1(),
+                   spatial = "off"
+                  )
+urch_mod_no_spatial
 
-sanity(urch_mod)
-
-tidy(urch_mod, conf.int = TRUE)
-
-tidy(urch_mod, "ran_pars", conf.int = TRUE)
-
-
-predictions<-predict(urch_mod, newdata=overall_rls_data_final)
-
-ggplot(data=predictions, aes(x=easting_km, y = northing_km, colour = omega_s))+
-  geom_point()
-
-#visreg::visreg(urch_mod, "protection_status")
-
-summary(urch_mod)
+sanity(urch_mod_no_spatial)
+tidy(urch_mod_no_spatial, conf.int = TRUE)
 ```
 
 ```{r Inspecting fit of urchin model}
-set.seed(123)
-overall_rls_data_final$resids <- simulate(urch_mod, nsim = 100, type = "mle-mvn") |>
-  dharma_residuals(urch_mod)
+urch_mod_no_spatial_resids <- residuals(urch_mod_no_spatial)
+urch_mod_no_spatial_resids <- urch_mod_no_spatial_resids[is.finite(urch_mod_no_spatial_resids)]
+qqnorm(urch_mod_no_spatial_resids);abline(0,1)
+
+
+#urch_mod_no_spatial_resids <- simulateResiduals(urch_mod_no_spatial)
+#plot(urch_mod_no_spatial_resids)
 ```
 
-```{r Plotting spatial residuals}
-ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids$observed))+
-  scale_colour_gradient2()+
-  geom_point()+
-  facet_wrap(~year)+
-  coord_fixed()
+Residuals ok but not quite right. Going to try with adding the spatial aspect into the model.
+
+### Urchin model spatial
+
+```{r Urchin model spatial}
+urch_mod_spatial <- sdmTMB(Mesocentrotus_franciscanus ~ protection_status,
+                   data = overall_rls_data_final,
+                   mesh = mesh_RLS,
+                   family = sdmTMB::nbinom1(),
+                   spatial = "on"
+                  )
+urch_mod_spatial
+
+sanity(urch_mod_spatial)
+tidy(urch_mod_spatial, conf.int = TRUE)
+
+#Tried gaussian, poisson, both not good. nbinom1 a little better but still
+#no good. nbinom2 still has dispersion significant. Tweedie also dispersed.
+
+urch_mod_glmm <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = gaussian(link = "identity"))
+
+urch_mod_glmm
+
+urch_mod_glmm_resids <- simulateResiduals(urch_mod_glmm)
+plot(urch_mod_glmm_resids)
+
+hist(residuals(urch_mod_glmm))
+summary(urch_mod_glmm)
 ```
+
+```{r}
+#extract residuals from model
+urch_mod_glmm_resids <- residuals(urch_mod_glmm)
+
+#creating the spatial weights matrix
+coords_for_auto_test <- st_as_sf(overall_rls_data_final, coords = c("longitude", "latitude"), crs = 4326)
+coords_for_auto_test_projected <- st_transform(coords_for_auto_test, crs = 3857)
+extracted_coords_for_auto_test_projected <- st_coordinates(coords_for_auto_test_projected)
+
+
+nb <- spdep::dnearneigh(extracted_coords_for_auto_test_projected, d1 = 0, d2 = 10)
+#picked 10 m for distance so that it includes the transects at same sites
+
+lw <- spdep::nb2listw(nb, style = "W", zero.policy = TRUE)
+
+
+##Testing the residuals with Moran's I test and weight matrix
+spdep::moran.test(urch_mod_glmm_resids, lw,
+           alternative = "two.sided")
+
+
+#Testing the residuals with inverse distance matrix as well to confirm
+dist_matrix <- as.matrix(dist(extracted_coords_for_auto_test_projected))
+inverse_dist_matrix <- 1 / (dist_matrix + 0.001)
+diag(inverse_dist_matrix) <- 0
+lw_inverse <- spdep::mat2listw(inverse_dist_matrix, style = "W")
+spdep::moran.test(urch_mod_glmm_resids, lw_inverse,
+           alternative = "two.sided")
+```
+
 
 ### Poisson
 
