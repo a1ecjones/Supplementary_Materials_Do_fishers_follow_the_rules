@@ -172,7 +172,9 @@ mutate(latitude = if_else(site_code == "BMSC21", 48.85205078, latitude))%>%
 ```{r Converting species with duplicate names to the accepted one}
 overall_rls_data_raw_lat_long_updated_names <- overall_rls_data_raw_lat_long%>%
   mutate(reporting_name = if_else(reporting_name == "Phyllolithodes papillosus",
-                                  "Echidnocerus cibarius", reporting_name))
+                                  "Echidnocerus cibarius", reporting_name),
+         reporting_name = if_else(reporting_name == "Mimulus foliatus",
+                                  "Pugettia foliata", reporting_name))
 ```
 
 
@@ -225,8 +227,8 @@ mutate(protection_status = case_when(
   site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
 ))
 
-overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182,
-                                                    seq(7, 181, by = 1))]
+#overall_rls_data_clean <- overall_rls_data_clean[,c(seq(1, 6, by = 1), 182,
+ #                                                   seq(7, 181, by = 1))]
 
 ##print(unique(overall_rls_data_clean$reporting_name))
 
