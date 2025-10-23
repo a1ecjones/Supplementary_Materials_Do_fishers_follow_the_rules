@@ -262,11 +262,11 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
          total_rockfish = Sebastes_spp. + Sebastes_pinniger + Sebastes_caurinus + Sebastes_maliger + Sebastes_melanops +
            Sebastes_nebulosus + Sebastes_flavidus,
          total_mesograzers = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
-           Lottia + Lottia_scutum + Megathura_crenulata + Mesocentrotus_franciscanus + Mimulus_foliatus +
+           Lottia + Lottia_scutum + Megathura_crenulata + Mesocentrotus_franciscanus +
            Pagurus_hemphilli + Pomaulax_gibberosus + Pugettia_foliata + Pugettia_gracilis + Pugettia_producta +
            Pugettia_richii + Strongylocentrotus_droebachiensis + Strongylocentrotus_purpuratus + Tegula_funebralis,
          mesograzers_w_o_urchins = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
-           Lottia + Lottia_scutum + Megathura_crenulata + Mimulus_foliatus +
+           Lottia + Lottia_scutum + Megathura_crenulata +
            Pagurus_hemphilli + Pomaulax_gibberosus + Pugettia_foliata + Pugettia_gracilis + Pugettia_producta +
            Pugettia_richii + Tegula_funebralis,
          total_nudibranchs = Acanthodoris_hudsoni + Acanthodoris_nanaimoensis + Aglaja_ocelligera +
@@ -276,7 +276,14 @@ overall_rls_data_groups <- overall_rls_data_clean%>%
            Dirona_albolineata + Dirona_pellucida + Doris_montereyensis + Doris_odhneri + 
            Geitodoris_heathi + Hermissenda_crassicornis + Limacia_cockerelli + Montereina_nobilis +
            Onchidoris_bilamellata + Polycera_tricolor + Rostanga_pulchra + Triopha_catalinae + Triopha_modesta +
-           Triopha_spp. + Tritonia_festiva)
+           Triopha_spp. + Tritonia_festiva,
+         total_decapods = Cancer_productus + Decapoda_spp.+ Glebocarcinus_oregonensis + Scyra_acutifrons +
+           Pachycheles_pubescens + Pugettia_producta + Pugettia_foliata + Pagurus_hemphilli + Romaleon_antennarium +
+           Oregonia_gracilis + Pugettia_gracilis + Echidnocerus_cibarius + Pandalus_gurneyi + Pagurus_beringanus +
+           Pandalus_danae + Cryptolithodes_typicus + Pagurus_caurinus + Lopholithodes_mandtii + Discorsopagurus_schmitti +
+           Chorilia_longipes + Pugettia_richii + Rhinolithodes_wosnessenskii + Heptacarpus_stylus + Lophopanopeus_bellus + 
+           Pachycheles_rudis + Hapalogaster_mertensii + Scyra + Paguristes_ulreyi + Elassochirus_tenuimanus + Pachycheles +
+           Pandalus + Petrolisthes_eriomerus)
 ```
 
 
@@ -1777,6 +1784,11 @@ ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Strongylocentrotus_droebachi
 
 
 
+```{r}
+ggplot(overall_rls_data_final, aes(y = total_fish, x = Mesocentrotus_franciscanus))+
+  geom_point()
+```
+
 
 ## Looking at the red turban snails
 
@@ -2673,7 +2685,7 @@ hist(protected_total_fish$total_fish)
 ```{r Fish abundance no spatial}
 fish_ab_no_spatial <- sdmTMB(
   data = overall_rls_data_final,
-  formula = total_fish ~ protection_status,
+  formula = total_fish ~ protection_status + Mesocentrotus_franciscanus,
   mesh = mesh_RLS,
   family = sdmTMB::nbinom1(link = "log"),
   spatial = "off"
@@ -2724,10 +2736,19 @@ sim_fish_ab_spatial_resids <- simulate(fish_ab_spatial, nsim = 500, type = "mle-
 r_fish_ab_spatial<- dharma_residuals(sim_fish_ab_spatial_resids, fish_ab_spatial, return_DHARMa = TRUE)
 plot(r_fish_ab_spatial)
 DHARMa::testResiduals(r_fish_ab_spatial)
+
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+fish_ab_spatial_resids_2 <- recalculateResiduals(r_fish_ab_spatial, group = site_group)
+testSpatialAutocorrelation(fish_ab_spatial_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
 ```
 
-Residuals also look quite bad for the spatial model. Possibly poisson is not correct.
+Residuals look ok for the spatial model, except for one warning.
+Also, using sdmTMB with spatial effects removes the spatial autocorrelation issue.
 
+Going to try with adding spatiotemporal effects to see if model fit is improved.
 
 #### Fish ab spatiotemp
 
@@ -2758,11 +2779,21 @@ qqnorm(fish_ab_spatiotemp_resids);abline(0, 1)
 
 
 sim_fish_ab_spatiotemp_resids <- simulate(fish_ab_spatiotemp, nsim = 500, type = "mle-mvn")
-r_fish_ab_spatiotemp<- dharma_residuals(sim_fish_ab_spatiotemp_resids, fish_ab_spatiotemp, return_DHARMa = TRUE)
+r_fish_ab_spatiotemp <- dharma_residuals(sim_fish_ab_spatiotemp_resids, fish_ab_spatiotemp, return_DHARMa = TRUE)
 plot(r_fish_ab_spatiotemp)
 DHARMa::testResiduals(r_fish_ab_spatiotemp)
-```
 
+
+#Testing for spatial autocorrelation
+#testSpatialAutocorrelation(r_fish_ab_spatiotemp, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+fish_ab_spatiotemp_resids_2 <- recalculateResiduals(r_fish_ab_spatiotemp, group = site_group)
+testSpatialAutocorrelation(fish_ab_spatiotemp_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation with the sdmTMB model. All warnings removed when using the spatiotemporal model with AR1.
 
 
 ```{r}
@@ -2777,7 +2808,82 @@ summary(fish_ab_spatiotemp$sd_report, select = "fixed", p.value = TRUE)
 We can see by the p value for the second row that protection status is not a significant predictor of total fish abundance at a site.
 
 
+### Selecting best model for fish abundance
 
+```{r Comparing models with and without random effects}
+AIC(fish_ab_no_spatial,
+    fish_ab_spatial,
+    fish_ab_spatiotemp)%>%
+  arrange(AIC)%>%
+  mutate(delta_AIC = AIC - AIC[1])
+```
+
+AIC for the spatial and spatiotemp models are very similar, but the spatiotemp model has better looking residuals so I am leaning towards using this one. The IID spatiotemp is 2 AIC better than the AR1 one but that seems to just be because it has one less degree of freedom. Also the IID has worse looking residuals with an error for quantile deviations.
+
+### Fish ab glmm
+
+```{r Fish ab glmm}
+fish_ab_glmm <- glmmTMB(total_fish ~ protection_status,
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom1())
+
+fish_ab_glmm
+
+fish_ab_glmm_resids <- simulateResiduals(fish_ab_glmm)
+plot(fish_ab_glmm_resids)
+testDispersion(fish_ab_glmm_resids)
+
+hist(residuals(fish_ab_glmm))
+summary(fish_ab_glmm)
+shapiro.test(residuals(fish_ab_glmm))
+#gaussian, poisson, nbinom1, nbinom2, nbinom12 no good. 
+```
+
+```{r Improved method of testing for spatial autocorrelation for urch mod no RE}
+fish_ab_glmm_resids <- simulateResiduals(fish_ab_glmm)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+fish_ab_glmm_resids_2 <- recalculateResiduals(fish_ab_glmm_resids, group = site_group)
+testSpatialAutocorrelation(fish_ab_glmm_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+Depending on the family chosen there is or is not spatial autocorrelation. 
+
+### Fish ab glmm with site
+
+```{r Fish ab glmm}
+fish_ab_glmm_site <- glmmTMB(total_fish ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom12())
+
+fish_ab_glmm_site
+
+fish_ab_glmm_site_resids <- simulateResiduals(fish_ab_glmm_site)
+plot(fish_ab_glmm_site_resids)
+testDispersion(fish_ab_glmm_site_resids)
+
+hist(residuals(fish_ab_glmm_site))
+summary(fish_ab_glmm_site)
+shapiro.test(residuals(fish_ab_glmm_site))
+#gaussian, poisson, nbinom1, nbinom2, nbinom12 no good. 
+```
+
+```{r Improved method of testing for spatial autocorrelation for urch mod no RE}
+fish_ab_glmm_site_resids <- simulateResiduals(fish_ab_glmm_site)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+fish_ab_glmm_site_resids_2 <- recalculateResiduals(fish_ab_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(fish_ab_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+Still autocorrelation when using site as a random effect.
+
+
+We are seeing spatial autocorrelation of the fish abundance models using glmmTMB. Therefore I will try fitting these models in sdmTMB to account for this autocorrelation.
 
 ### Fish maximum size model
 The next model I will attempt to fit will be looking at whether protection status predicts the max size of fish species in the data.
@@ -3112,7 +3218,7 @@ ggsave("sp_specificity_plot.pdf", plot = sp_specificity_plot,
 
 ## Urchin Modelling
 
-I will be starting with a model looking at the red sea urchins only, as preliminary analyses show that the numbers of other urchin species are neglible compared to the red urchins.
+I will be starting with a model looking at the red sea urchins only, as preliminary analyses show that the numbers of other urchin species are negligible compared to the red urchins.
 
 I will try with a few different likely distributional families and then see which one fits the data the best.
 
@@ -3139,14 +3245,17 @@ sanity(urch_mod_no_spatial)
 tidy(urch_mod_no_spatial, conf.int = TRUE)
 ```
 
+
 ```{r Inspecting fit of urchin model}
 urch_mod_no_spatial_resids <- residuals(urch_mod_no_spatial)
 urch_mod_no_spatial_resids <- urch_mod_no_spatial_resids[is.finite(urch_mod_no_spatial_resids)]
 qqnorm(urch_mod_no_spatial_resids);abline(0,1)
 
 
-#urch_mod_no_spatial_resids <- simulateResiduals(urch_mod_no_spatial)
-#plot(urch_mod_no_spatial_resids)
+sim_urch_mod_no_spatial_resids <- simulate(urch_mod_no_spatial, nsim = 500, type = "mle-mvn")
+r_urch_mod_no_spatial<- dharma_residuals(sim_urch_mod_no_spatial_resids, urch_mod_no_spatial, return_DHARMa = TRUE)
+plot(r_urch_mod_no_spatial)
+DHARMa::testResiduals(r_urch_mod_no_spatial)
 ```
 
 Residuals ok but not quite right. Going to try with adding the spatial aspect into the model.
@@ -3167,8 +3276,59 @@ tidy(urch_mod_spatial, conf.int = TRUE)
 
 #Tried gaussian, poisson, both not good. nbinom1 a little better but still
 #no good. nbinom2 still has dispersion significant. Tweedie also dispersed.
+```
 
-urch_mod_glmm <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + (1|site_code),
+```{r Inspecting fit of urch mod spatial}
+set.seed(123)
+urch_mod_spatial_resids <- residuals(urch_mod_spatial, type = "mle-mvn")
+urch_mod_spatial_resids <- urch_mod_spatial_resids[is.finite(urch_mod_spatial_resids)]
+qqnorm(urch_mod_spatial_resids);abline(0, 1)
+#qqline(fish_ab_spatial_resids)
+
+
+sim_urch_mod_spatial_resids <- simulate(urch_mod_spatial, nsim = 500, type = "mle-mvn")
+r_urch_mod_spatial<- dharma_residuals(sim_urch_mod_spatial_resids, urch_mod_spatial, return_DHARMa = TRUE)
+plot(r_urch_mod_spatial)
+DHARMa::testResiduals(r_urch_mod_spatial)
+```
+
+
+### Urchin model spatiotemporal
+
+```{r Urch mod spatiotemp}
+urch_mod_spatiotemp <- sdmTMB(Mesocentrotus_franciscanus ~ protection_status,
+                   data = overall_rls_data_final,
+                   mesh = mesh_RLS,
+                   family = sdmTMB::nbinom1(),
+                   spatial = "on",
+                   time = "year",
+                   spatiotemporal = "RW"
+                  )
+urch_mod_spatiotemp
+
+sanity(urch_mod_spatiotemp)
+tidy(urch_mod_spatiotemp, conf.int = TRUE)
+```
+
+```{r Testing fit of urch mod spatiotemp}
+set.seed(3453)
+urch_mod_spatiotemp_resids <- residuals(urch_mod_spatiotemp, type = "mle-mvn")
+urch_mod_spatiotemp_resids <- urch_mod_spatiotemp_resids[is.finite(urch_mod_spatiotemp_resids)]
+qqnorm(urch_mod_spatiotemp_resids);abline(0, 1)
+#qqline(fish_ab_spatial_resids)
+
+
+sim_urch_mod_spatiotemp_resids <- simulate(urch_mod_spatiotemp, nsim = 500, type = "mle-mvn")
+r_urch_mod_spatiotemp<- dharma_residuals(sim_urch_mod_spatiotemp_resids, urch_mod_spatiotemp, return_DHARMa = TRUE)
+plot(r_urch_mod_spatiotemp)
+DHARMa::testResiduals(r_urch_mod_spatiotemp)
+```
+
+
+### Urchin model with glmmTMB no RE
+
+```{r Urch mod no RE}
+urch_mod_glmm <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status,
                          data = overall_rls_data_final,
                          family = gaussian(link = "identity"))
 
@@ -3181,66 +3341,180 @@ hist(residuals(urch_mod_glmm))
 summary(urch_mod_glmm)
 ```
 
+```{r Improved method of testing for spatial autocorrelation for urch mod no RE}
+urch_mod_glmm_resids <- simulateResiduals(urch_mod_glmm)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+urch_mod_glmm_resids_2 <- recalculateResiduals(urch_mod_glmm_resids, group = site_group)
+testSpatialAutocorrelation(urch_mod_glmm_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation for urchins.
+
+### Urch mod glmmTMB with site
+
+Adding site as a random effect to account for multiple repeated samples at the same site both within years and over the years
+
+```{r Urch mod glmmTMB with site}
+urch_mod_glmm_site <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = gaussian())
+
+urch_mod_glmm_site
+
+urch_mod_glmm_site_resids <- simulateResiduals(urch_mod_glmm_site)
+plot(urch_mod_glmm_site_resids)
+
+hist(residuals(urch_mod_glmm_site))
+summary(urch_mod_glmm_site)
+```
+
+```{r Improved method of testing for spatial autocorrelation}
+urch_mod_glmm_site_resids <- simulateResiduals(urch_mod_glmm_site)
+#testSpatialAutocorrelation(urch_mod_glmm_site_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting", "northing")], list(site_group), mean)
+
+urch_mod_glmm_site_resids_2 <- recalculateResiduals(urch_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(urch_mod_glmm_site_resids_2, x = group_locations$easting, y = group_locations$northing)
+```
+### Urch mod with fish
+
+Adding fish as a predictor because there seems to be a strong trend for less urchins with more fish.
+
+```{r Urch mod no RE with fish}
+urch_mod_glmm_fish <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + total_fish,
+                         data = overall_rls_data_final,
+                         family = gaussian(link = "identity"))
+
+urch_mod_glmm_fish
+
+urch_mod_glmm_fish_resids <- simulateResiduals(urch_mod_glmm_fish)
+plot(urch_mod_glmm_fish_resids)
+testDispersion(urch_mod_glmm_fish)
+
+hist(residuals(urch_mod_glmm_fish))
+summary(urch_mod_glmm_fish)
+```
+Fish seems to be a highly significant predictor but resids dont look great.
+
+```{r Improved method of testing for spatial autocorrelation for urch mod no RE}
+urch_mod_glmm_fish_resids <- simulateResiduals(urch_mod_glmm_fish)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting", "northing")], list(site_group), mean)
+
+urch_mod_glmm_fish_resids_2 <- recalculateResiduals(urch_mod_glmm_fish_resids, group = site_group)
+testSpatialAutocorrelation(urch_mod_glmm_fish_resids_2, x = group_locations$easting, y = group_locations$northing)
+```
+
+
+### Urch mod with site and fish
+
+```{r Urch mod glmmTMB with site and fish}
+urch_mod_glmm_site_fish <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + (1|site_code)
+                              + total_fish,
+                         data = overall_rls_data_final,
+                         family = gaussian())
+
+urch_mod_glmm_site_fish
+
+urch_mod_glmm_site_fish_resids <- simulateResiduals(urch_mod_glmm_site_fish)
+plot(urch_mod_glmm_site_fish_resids)
+testDispersion(urch_mod_glmm_site_fish_resids)
+
+hist(residuals(urch_mod_glmm_site_fish))
+summary(urch_mod_glmm_site_fish)
+
+performance::check_collinearity(urch_mod_glmm_site_fish,
+                                component = c("all"))
+
+car::Anova(urch_mod_glmm_site_fish)
+
+ae <- effects::allEffects(urch_mod_glmm_site_fish)
+plot(ae)
+```
+
+Resids look much improved to the model with fish and no site.
+
+```{r Improved method of testing for spatial autocorrelation for urch mod site fish}
+urch_mod_glmm_site_fish_resids <- simulateResiduals(urch_mod_glmm_site_fish)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting", "northing")], list(site_group), mean)
+
+urch_mod_glmm_site_fish_resids_2 <- recalculateResiduals(urch_mod_glmm_site_fish_resids, group = site_group)
+testSpatialAutocorrelation(urch_mod_glmm_site_fish_resids_2, x = group_locations$easting, y = group_locations$northing)
+```
+
+### AIC of urch models
+
+```{r Comparing models with and without random effects}
+AIC(urch_mod_glmm,
+     urch_mod_glmm_site,
+    urch_mod_glmm_fish,
+    urch_mod_glmm_site_fish)%>%
+  arrange(AIC)%>%
+  mutate(delta_AIC = AIC - AIC[1])
+```
+The model with site and fish included seems way better. Alternatively, if we only want to look at the effect of protection status we can just use the model with site and no fish because it has good fit and AIC.
+
+
+
+## Total decapod modelling
+
+
+### Looking at decapod data distribution
+
 ```{r}
-#extract residuals from model
-urch_mod_glmm_resids <- residuals(urch_mod_glmm)
+hist(overall_rls_data_final$total_decapods)
+hist(protected_total_fish$total_decapods)
+hist(unprotected_total_fish$total_decapods)
 
-#creating the spatial weights matrix
-coords_for_auto_test <- st_as_sf(overall_rls_data_final, coords = c("longitude", "latitude"), crs = 4326)
-coords_for_auto_test_projected <- st_transform(coords_for_auto_test, crs = 3857)
-extracted_coords_for_auto_test_projected <- st_coordinates(coords_for_auto_test_projected)
-
-
-nb <- spdep::dnearneigh(extracted_coords_for_auto_test_projected, d1 = 0, d2 = 10)
-#picked 10 m for distance so that it includes the transects at same sites
-
-lw <- spdep::nb2listw(nb, style = "W", zero.policy = TRUE)
-
-
-##Testing the residuals with Moran's I test and weight matrix
-spdep::moran.test(urch_mod_glmm_resids, lw,
-           alternative = "two.sided")
-
-
-#Testing the residuals with inverse distance matrix as well to confirm
-dist_matrix <- as.matrix(dist(extracted_coords_for_auto_test_projected))
-inverse_dist_matrix <- 1 / (dist_matrix + 0.001)
-diag(inverse_dist_matrix) <- 0
-lw_inverse <- spdep::mat2listw(inverse_dist_matrix, style = "W")
-spdep::moran.test(urch_mod_glmm_resids, lw_inverse,
-           alternative = "two.sided")
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_decapods))+
+  geom_boxplot()
 ```
 
+### Decapods glmm
 
-### Poisson
+```{r Dec mod glmm}
+dec_mod_glmm <- glmmTMB(total_decapods ~ protection_status,
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom1())
 
-```{r Urchin model}
-urch_mod_poi <- sdmTMB(total_urchins ~ protection_status,
-                   data = overall_rls_data_final,
-                   mesh = mesh_RLS,
-                   time = "year",
-                   family = poisson(link = "log"),
-                   spatial = "off",
-                   spatiotemporal = "off")
-urch_mod_poi
+dec_mod_glmm
 
-sanity(urch_mod_poi)
+dec_mod_glmm_resids <- simulateResiduals(dec_mod_glmm)
+plot(dec_mod_glmm_resids)
+testDispersion(dec_mod_glmm_resids)
 
-tidy(urch_mod_poi, conf.int = TRUE)
+hist(residuals(dec_mod_glmm))
+summary(dec_mod_glmm)
 
-tidy(urch_mod_poi, "ran_pars", conf.int = TRUE)
+#gaussian, poisson, not good. nbinom1 and nbinom2 good
 ```
 
-```{r Inspecting fit of urchin model}
-set.seed(123)
-overall_rls_data_final$resids_poi <- simulate(urch_mod_poi, nsim = 100, type = "mle-mvn") |>
-  dharma_residuals(urch_mod_poi)
+```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
+urch_mod_glmm_resids <- simulateResiduals(urch_mod_glmm)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+urch_mod_glmm_resids_2 <- recalculateResiduals(urch_mod_glmm_resids, group = site_group)
+testSpatialAutocorrelation(urch_mod_glmm_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
 ```
 
-```{r Plotting spatial residuals}
-ggplot(overall_rls_data_final, aes(x = easting_km, y = northing_km, colour = resids_poi$observed))+
-  scale_colour_gradient2()+
-  geom_point()+
-  facet_wrap(~year)+
-  coord_fixed()
+### Decapods glmm with site
+
+```{r Comparing dec models with and without random effects}
+AIC(dec_mod_glmm,
+    dec_mod_glmm2)%>%
+  arrange(AIC)%>%
+  mutate(delta_AIC = AIC - AIC[1])
 ```
