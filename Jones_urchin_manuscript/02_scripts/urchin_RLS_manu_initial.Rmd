@@ -3500,21 +3500,299 @@ summary(dec_mod_glmm)
 ```
 
 ```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
-urch_mod_glmm_resids <- simulateResiduals(urch_mod_glmm)
+dec_mod_glmm_resids <- simulateResiduals(dec_mod_glmm)
 #testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
 
 site_group <- overall_rls_data_final$site_code
 group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
 
-urch_mod_glmm_resids_2 <- recalculateResiduals(urch_mod_glmm_resids, group = site_group)
-testSpatialAutocorrelation(urch_mod_glmm_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+dec_mod_glmm_resids_2 <- recalculateResiduals(dec_mod_glmm_resids, group = site_group)
+testSpatialAutocorrelation(dec_mod_glmm_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
 ```
+No spatial autocorrelation for the decapod model.
+
 
 ### Decapods glmm with site
 
+```{r Dec mod glmm}
+dec_mod_glmm_site <- glmmTMB(total_decapods ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom1())
+
+dec_mod_glmm_site
+
+dec_mod_glmm_site_resids <- simulateResiduals(dec_mod_glmm_site)
+plot(dec_mod_glmm_site_resids)
+testDispersion(dec_mod_glmm_site_resids)
+
+hist(residuals(dec_mod_glmm_site))
+summary(dec_mod_glmm_site)
+
+#
+```
+
+```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
+dec_mod_glmm_site_resids <- simulateResiduals(dec_mod_glmm_site)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+dec_mod_glmm_site_resids_2 <- recalculateResiduals(dec_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(dec_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation
+
+
+### Decapods with fish
+
+```{r Dec mod glmm}
+dec_mod_glmm_fish <- glmmTMB(total_decapods ~ protection_status + total_fish,
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom1())
+
+dec_mod_glmm_fish
+
+dec_mod_glmm_fish_resids <- simulateResiduals(dec_mod_glmm_fish)
+plot(dec_mod_glmm_fish_resids)
+testDispersion(dec_mod_glmm_fish_resids)
+
+hist(residuals(dec_mod_glmm_fish))
+summary(dec_mod_glmm_fish)
+
+#gaussian, poisson, not good. nbinom1 and nbinom2 good, with a slight warning for nbinom1
+```
+
+```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
+dec_mod_glmm_fish_resids <- simulateResiduals(dec_mod_glmm_fish)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+dec_mod_glmm_fish_resids_2 <- recalculateResiduals(dec_mod_glmm_fish_resids, group = site_group)
+testSpatialAutocorrelation(dec_mod_glmm_fish_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation.
+
+### Decapods with site and fish
+
+```{r Dec mod glmm site fish}
+dec_mod_glmm_site_fish <- glmmTMB(total_decapods ~ protection_status + total_fish +
+                                    (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom1())
+
+dec_mod_glmm_site_fish
+
+dec_mod_glmm_site_fish_resids <- simulateResiduals(dec_mod_glmm_site_fish)
+plot(dec_mod_glmm_site_fish_resids)
+testDispersion(dec_mod_glmm_site_fish_resids)
+
+hist(residuals(dec_mod_glmm_site_fish))
+summary(dec_mod_glmm_site_fish)
+
+#
+```
+
+```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
+dec_mod_glmm_site_fish_resids <- simulateResiduals(dec_mod_glmm_site_fish)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+dec_mod_glmm_site_fish_resids_2 <- recalculateResiduals(dec_mod_glmm_site_fish_resids, group = site_group)
+testSpatialAutocorrelation(dec_mod_glmm_site_fish_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation
+
+### Comparing decapod models
+
 ```{r Comparing dec models with and without random effects}
 AIC(dec_mod_glmm,
-    dec_mod_glmm2)%>%
+    dec_mod_glmm2,
+    dec_mod_glmm_site,
+    dec_mod_glmm_fish,
+    dec_mod_glmm_fish2,
+    dec_mod_glmm_site_fish)%>%
   arrange(AIC)%>%
   mutate(delta_AIC = AIC - AIC[1])
 ```
+
+The best fitting model appears to be the simple glmm with no random effects and without the fish variable.
+
+
+## Red turban snail modelling
+
+```{r}
+hist(overall_rls_data_final$Pomaulax_gibberosus)
+hist(protected_total_fish$Pomaulax_gibberosus)
+hist(unprotected_total_fish$Pomaulax_gibberosus)
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Pomaulax_gibberosus))+
+  geom_boxplot()
+```
+
+
+Effingham west has crazy outliers for the numbers of red turban snails so i am going to try removing this site from the analysis as it appears to be causing some issues.
+
+```{r Removing outliers for snail counts}
+snail_model_data <- overall_rls_data_final%>%
+  filter(site_code != "BMSC13")
+```
+
+
+### Snail glmm
+
+```{r Snail mod glmm}
+snail_mod_glmm <- glmmTMB(Pomaulax_gibberosus ~ protection_status,
+                         data = snail_model_data,
+                         family = glmmTMB::nbinom1())
+
+snail_mod_glmm
+
+snail_mod_glmm_resids <- simulateResiduals(snail_mod_glmm)
+plot(snail_mod_glmm_resids)
+testDispersion(snail_mod_glmm_resids)
+testOutliers(snail_mod_glmm_resids)
+
+
+hist(residuals(snail_mod_glmm))
+summary(snail_mod_glmm)
+
+#gaussian, poisson, not good. nbinom1 looks good when outliers from effingham west removed.
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for snail mod no RE}
+snail_mod_glmm_resids <- simulateResiduals(snail_mod_glmm)
+
+
+site_group <- snail_model_data$site_code
+group_locations <- aggregate(snail_model_data[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_resids_2 <- recalculateResiduals(snail_mod_glmm_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation.
+
+
+### Snail glmm site
+
+```{r Snail mod glmm site}
+snail_mod_glmm_site <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
+                         data = snail_model_data,
+                         family = glmmTMB::nbinom1())
+
+snail_mod_glmm_site
+
+snail_mod_glmm_site_resids <- simulateResiduals(snail_mod_glmm_site)
+plot(snail_mod_glmm_site_resids)
+testDispersion(snail_mod_glmm_site_resids)
+testOutliers(snail_mod_glmm_site_resids)
+
+
+hist(residuals(snail_mod_glmm_site))
+summary(snail_mod_glmm_site)
+
+#gaussian, poisson, not good. nbinom1 looks good when outliers from effingham west removed.
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for snail mod no RE}
+snail_mod_glmm_site_resids <- simulateResiduals(snail_mod_glmm_site)
+
+
+site_group <- snail_model_data$site_code
+group_locations <- aggregate(snail_model_data[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_site_resids_2 <- recalculateResiduals(snail_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation
+
+
+### Snail glmm fish
+
+```{r Snail mod glmm fish}
+snail_mod_glmm_fish <- glmmTMB(Pomaulax_gibberosus ~ protection_status + total_fish, 
+                         data = snail_model_data,
+                         family = glmmTMB::nbinom1())
+
+snail_mod_glmm_fish
+
+snail_mod_glmm_fish_resids <- simulateResiduals(snail_mod_glmm_fish)
+plot(snail_mod_glmm_fish_resids)
+testDispersion(snail_mod_glmm_fish_resids)
+testOutliers(snail_mod_glmm_fish_resids)
+
+
+hist(residuals(snail_mod_glmm_fish))
+summary(snail_mod_glmm_fish)
+
+#gaussian, poisson, not good. nbinom1 looks good when outliers from effingham west removed.
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for snail mod no RE}
+snail_mod_glmm_fish_resids <- simulateResiduals(snail_mod_glmm_fish)
+
+
+site_group <- snail_model_data$site_code
+group_locations <- aggregate(snail_model_data[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_fish_resids_2 <- recalculateResiduals(snail_mod_glmm_fish_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_fish_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation.
+
+### Snail glmm site fish
+
+```{r Snail mod glmm site fish}
+snail_mod_glmm_site_fish <- glmmTMB(Pomaulax_gibberosus ~ protection_status + 
+                                      total_fish + (1|site_code),
+                         data = snail_model_data,
+                         family = glmmTMB::nbinom1())
+
+snail_mod_glmm_site_fish
+
+snail_mod_glmm_site_fish_resids <- simulateResiduals(snail_mod_glmm_site_fish)
+plot(snail_mod_glmm_site_fish_resids)
+testDispersion(snail_mod_glmm_site_fish_resids)
+testOutliers(snail_mod_glmm_site_fish_resids)
+
+
+hist(residuals(snail_mod_glmm_site_fish))
+summary(snail_mod_glmm_site_fish)
+
+#gaussian, poisson, not good. nbinom1 looks good when outliers from effingham west removed.
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for snail mod no RE}
+snail_mod_glmm_site_fish_resids <- simulateResiduals(snail_mod_glmm_site_fish)
+
+
+site_group <- snail_model_data$site_code
+group_locations <- aggregate(snail_model_data[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_site_fish_resids_2 <- recalculateResiduals(snail_mod_glmm_site_fish_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_site_fish_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation.
+
+
+### Comparing snail models
+
+```{r Comparing snail models}
+AIC(snail_mod_glmm,
+    snail_mod_glmm_site,
+    snail_mod_glmm_fish,
+    snail_mod_glmm_site_fish)%>%
+  arrange(AIC)%>%
+  mutate(delta_AIC = AIC - AIC[1])
+```
+
+
+
+
+
+
