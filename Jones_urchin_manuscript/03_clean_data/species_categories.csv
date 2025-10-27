@@ -5,22 +5,22 @@ Apodichthys flavidus,Myoxocephalus aenaeus,Orthonopias triacis
 Jordania zonope,Artedius fenestralis,Pholis
 Ophiodon elongatus,Synchirus gilli,Pholis laeta
 Cottid spp.,Cadlina modesta,Asemichthys taylori
-Oxylebius pictus,Pugettia foliata,Anoplarchus
-Oligocottus maculosus,Dirona pellucida,Hemilepidotus spinosus
-Enophrys bison,Pachycheles rudis,Pholis ornata
-Scorpaenichthys marmoratus,Heptacarpus stylus,Pleuronichthys coenosus
-Anarrhichthys ocellatus,Opalia wroblewskyi,Citharichthys stigmaeus
-Pholis clemensi,Amphissa columbiana,Liparis florae
-Cancer productus,Tegula funebralis,Ascelichthys rhodorus
-Decapoda spp.,Elassochirus tenuimanus,Pugettia gracilis
-Dermasterias imbricata,Pachycheles,Enteroctopus dofleini
-Mesocentrotus franciscanus,Malacostraca spp.,Neverita lewisii
-Apostichopus californicus,Armina californica,Triopha modesta
-Crassadoma gigantea,Pandalus,Pandalus gurneyi
-Diaulula sandiegensis,Cadlina sylviaearleae,Triopha catalinae
-Haliotis kamtschatkana,Eurylepta leoparda,Triopha spp.
-Diodora aspera,Aldisa,Antiopella fusca
-Henricia leviuscula,Percidae spp.,Nucella lamellosa
+Oxylebius pictus,Dirona pellucida,Anoplarchus
+Oligocottus maculosus,Pachycheles rudis,Hemilepidotus spinosus
+Enophrys bison,Heptacarpus stylus,Pholis ornata
+Scorpaenichthys marmoratus,Opalia wroblewskyi,Pleuronichthys coenosus
+Anarrhichthys ocellatus,Amphissa columbiana,Citharichthys stigmaeus
+Pholis clemensi,Tegula funebralis,Liparis florae
+Cancer productus,Elassochirus tenuimanus,Ascelichthys rhodorus
+Decapoda spp.,Pachycheles,Pugettia gracilis
+Dermasterias imbricata,Malacostraca spp.,Enteroctopus dofleini
+Mesocentrotus franciscanus,Armina californica,Neverita lewisii
+Apostichopus californicus,Pandalus,Triopha modesta
+Crassadoma gigantea,Cadlina sylviaearleae,Pandalus gurneyi
+Diaulula sandiegensis,Eurylepta leoparda,Triopha catalinae
+Haliotis kamtschatkana,Aldisa,Triopha spp.
+Diodora aspera,Percidae spp.,Antiopella fusca
+Henricia leviuscula,NA,Nucella lamellosa
 Doris montereyensis,NA,Discorsopagurus schmitti
 Acmaea mitra,NA,Coryphella verrucosa
 Lottia scutum,NA,Lottia
@@ -29,24 +29,25 @@ Orthasterias koehleri,NA,Pugettia richii
 Henricia spp.,NA,Dendronotus albus
 Ceratostoma foliatum,NA,Boreoberthella chacei
 Diaulula odonoghuei,NA,Leptasterias hexactis
-Pomaulax gibberosus,NA,Mimulus foliatus
-Glebocarcinus oregonensis,NA,Pachythyone rubra
-Scyra acutifrons,NA,Solaster stimpsoni
-Pachycheles pubescens,NA,Aglaja ocelligera
-Coryphella trilineata,NA,Acanthodoris nanaimoensis
-Acanthodoris hudsoni,NA,Solaster dawsoni
-Tritonia festiva,NA,Leptasterias
-Strongylocentrotus droebachiensis,NA,Onchidoris bilamellata
-Chlamys,NA,Cryptonatica aleutica
-Pugettia producta,NA,Petrolisthes eriomerus
-Patiria miniata,NA,Actinopterygii spp.
-Pagurus hemphilli,NA,Pleurobrachia bachei
-Pycnopodia helianthoides,NA,Embiotocidae spp.
-Pisaster ochraceus,NA,Zalophus californianus
-Montereina nobilis,NA,Cymatogaster aggregata
-Hermissenda crassicornis,NA,Sebastes pinniger
-Dirona albolineata,NA,Rhamphocottus richardsonii
-Polycera tricolor,NA,Gibbonsia metzi
+Pomaulax gibberosus,NA,Pachythyone rubra
+Glebocarcinus oregonensis,NA,Solaster stimpsoni
+Scyra acutifrons,NA,Aglaja ocelligera
+Pachycheles pubescens,NA,Acanthodoris nanaimoensis
+Coryphella trilineata,NA,Solaster dawsoni
+Acanthodoris hudsoni,NA,Leptasterias
+Tritonia festiva,NA,Onchidoris bilamellata
+Strongylocentrotus droebachiensis,NA,Cryptonatica aleutica
+Chlamys,NA,Petrolisthes eriomerus
+Pugettia producta,NA,Actinopterygii spp.
+Pugettia foliata,NA,Pleurobrachia bachei
+Patiria miniata,NA,Embiotocidae spp.
+Pagurus hemphilli,NA,Zalophus californianus
+Pycnopodia helianthoides,NA,Cymatogaster aggregata
+Pisaster ochraceus,NA,Sebastes pinniger
+Montereina nobilis,NA,Rhamphocottus richardsonii
+Hermissenda crassicornis,NA,Gibbonsia metzi
+Dirona albolineata,NA,NA
+Polycera tricolor,NA,NA
 Mitrocoma cellularia,NA,NA
 Cadlina luteomarginata,NA,NA
 Cadlina,NA,NA

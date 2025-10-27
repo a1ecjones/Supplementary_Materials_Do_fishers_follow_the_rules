@@ -538,6 +538,20 @@ overall_rls_data_expanded$reporting_name[is.na(overall_rls_data_expanded$reporti
 ```
 
 
+## Making a df with only fish species
+
+```{r Fish species richness df}
+fish_sp_rich_df_intermediate <- overall_rls_data_expanded%>%
+  distinct(site_code, site_name, survey_date, depth, reporting_name, protection_status, latitude, longitude)
+
+fish_sp_rich_df_intermediate$reporting_name <- as.factor(fish_sp_rich_df_intermediate$reporting_name)
+
+fish_sp_rich_df <- fish_sp_rich_df_intermediate%>%
+  group_by(site_code, site_name, survey_date, depth, protection_status, latitude, longitude)%>%
+  summarise(fish_sp_rich = length(unique(reporting_name)))
+```
+
+
 ## Making a df for plotting community composition
 
 ```{r}
@@ -3015,6 +3029,133 @@ plot(r_max_fish_size_spatial)
 DHARMa::testResiduals(r_max_fish_size_spatial)
 ```
 
+
+### Fish species richness model
+
+In this model I will be testing the transect level species richness of fish to see if there are differences between protected and unprotected transects. I will start by making a dataframe that only has fish, and then counting the unique species observed at each transect.
+
+
+#### Making a df with only fish species
+
+```{r Fish species richness df}
+fish_sp_rich_df_intermediate <- overall_rls_data_expanded%>%
+  distinct(site_code, site_name, survey_date, depth, reporting_name, protection_status)
+
+fish_sp_rich_df_intermediate$reporting_name <- as.factor(fish_sp_rich_df_intermediate$reporting_name)
+
+fish_sp_rich_df <- fish_sp_rich_df_intermediate%>%
+  group_by(site_code, site_name, survey_date, depth, protection_status)%>%
+  summarise(fish_sp_rich = length(unique(reporting_name)))
+
+fish_sp_rich_df <- fish_sp_rich_df%>%
+  left_join(overall_rls_data_final, by = c("site_code","site_name", "survey_date","depth", "protection_status"))
+```
+
+#### Looking at the species richness distribution
+
+```{r Checking the distribution of the fish species richness data}
+hist(fish_sp_rich_df$fish_sp_rich)
+
+unprotected_fish_sp_rich <- fish_sp_rich_df%>%
+  filter(protection_status == "unprotected")
+hist(unprotected_fish_sp_rich$fish_sp_rich)
+
+protected_fish_sp_rich <- fish_sp_rich_df%>%
+  filter(protection_status == "protected")
+hist(protected_fish_sp_rich$fish_sp_rich)
+
+ggplot(fish_sp_rich_df, aes(x = protection_status, y = fish_sp_rich))+
+  geom_boxplot()
+```
+
+#### Fish species richness glmm
+
+```{r Fish sp rich glmm}
+fish_sp_rich_glmm <- glmmTMB(fish_sp_rich ~ protection_status,
+                             data = fish_sp_rich_df,
+                             family = glmmTMB::nbinom1())
+
+fish_sp_rich_glmm
+
+fish_sp_rich_glmm_resids <- simulateResiduals(fish_sp_rich_glmm)
+plot(fish_sp_rich_glmm_resids)
+testDispersion(fish_sp_rich_glmm_resids)
+
+hist(residuals(fish_sp_rich_glmm))
+summary(fish_sp_rich_glmm)
+shapiro.test(residuals(fish_sp_rich_glmm))
+#gaussian ok. Poisson a bit better, nbinom1 ok, nbinom2 ok.  
+```
+
+```{r Improved method of testing for spatial autocorrelation for fish sp rich mod no RE}
+fish_sp_rich_glmm_resids <- simulateResiduals(fish_sp_rich_glmm)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group_sp <- fish_sp_rich_df$site_code
+group_locations_sp <- aggregate(fish_sp_rich_df[, c("easting_km", "northing_km")], list(site_group_sp), mean)
+
+fish_sp_rich_glmm_resids_2 <- recalculateResiduals(fish_sp_rich_glmm_resids, group = site_group_sp)
+testSpatialAutocorrelation(fish_sp_rich_glmm_resids_2, x = group_locations_sp$easting_km, y = group_locations_sp$northing_km)
+```
+Appears to be some spatial autocorrelation.
+
+NEED TO COMPARE ACROSS THE FOUR FAMILIES
+
+#### Fish species richness glmm site
+
+```{r Fish sp rich glmm site}
+fish_sp_rich_glmm_site <- glmmTMB(fish_sp_rich ~ protection_status + (1|site_code),
+                             data = fish_sp_rich_df,
+                             family = glmmTMB::nbinom2())
+
+fish_sp_rich_glmm_site
+
+fish_sp_rich_glmm_site_resids <- simulateResiduals(fish_sp_rich_glmm_site)
+plot(fish_sp_rich_glmm_site_resids)
+testDispersion(fish_sp_rich_glmm_site_resids)
+
+hist(residuals(fish_sp_rich_glmm_site))
+summary(fish_sp_rich_glmm_site)
+shapiro.test(residuals(fish_sp_rich_glmm_site))
+#gaussian bad. Poisson bad, nbinom1 has model convergence warning but good looking residuals, nbinom2 good.  
+```
+
+```{r Plotting effects}
+fish_sp_rich_site_effects <- effects::allEffects(fish_sp_rich_glmm_site)
+plot(fish_sp_rich_site_effects)
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for fish sp rich mod no RE}
+fish_sp_rich_glmm_site_resids <- simulateResiduals(fish_sp_rich_glmm_site)
+
+site_group_sp <- fish_sp_rich_df$site_code
+group_locations_sp <- aggregate(fish_sp_rich_df[, c("easting_km", "northing_km")], list(site_group_sp), mean)
+
+fish_sp_rich_glmm_site_resids_2 <- recalculateResiduals(fish_sp_rich_glmm_site_resids, group = site_group_sp)
+testSpatialAutocorrelation(fish_sp_rich_glmm_site_resids_2, x = group_locations_sp$easting_km, y = group_locations_sp$northing_km)
+```
+There is still spatial autocorrelation.
+
+#### Comparing fish sp richness models
+
+```{r Comparing fish sp rich models}
+AIC(fish_sp_rich_glmm,
+    fish_sp_rich_glmm_site)%>%
+  arrange(AIC)%>%
+  mutate(delta_AIC = AIC - AIC[1])
+```
+
+
+Because we are seeing spatial autocorrelation in the fish sp richness glmms I will try to do this model with sdmTMB to get account for the spatial autocorrelation.
+
+
+
+
+
+
+
+
 ### Species specific to protected or unprotected areas
 
 #### Identifying the species specific to the protection classifications
@@ -3608,10 +3749,10 @@ No spatial autocorrelation
 
 ```{r Comparing dec models with and without random effects}
 AIC(dec_mod_glmm,
-    dec_mod_glmm2,
+    #dec_mod_glmm2,
     dec_mod_glmm_site,
     dec_mod_glmm_fish,
-    dec_mod_glmm_fish2,
+   # dec_mod_glmm_fish2,
     dec_mod_glmm_site_fish)%>%
   arrange(AIC)%>%
   mutate(delta_AIC = AIC - AIC[1])
@@ -3794,5 +3935,7 @@ AIC(snail_mod_glmm,
 
 
 
+## Kelp modelling
 
+I would like to model the kelp to see if it is more likely to have a kelp site present in the protected areas vs the unprotected areas. However, since the sites are not chosen randomly, and they were specifically chosen as kelp sites then this might not be valid. Need to check on this first.
 
