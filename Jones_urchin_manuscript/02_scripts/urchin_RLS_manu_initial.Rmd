@@ -3097,7 +3097,7 @@ group_locations_sp <- aggregate(fish_sp_rich_df[, c("easting_km", "northing_km")
 fish_sp_rich_glmm_resids_2 <- recalculateResiduals(fish_sp_rich_glmm_resids, group = site_group_sp)
 testSpatialAutocorrelation(fish_sp_rich_glmm_resids_2, x = group_locations_sp$easting_km, y = group_locations_sp$northing_km)
 ```
-Appears to be some spatial autocorrelation.
+No spatial autocorrelation
 
 NEED TO COMPARE ACROSS THE FOUR FAMILIES
 
@@ -3126,7 +3126,7 @@ plot(fish_sp_rich_site_effects)
 ```
 
 
-```{r Improved method of testing for spatial autocorrelation for fish sp rich mod no RE}
+```{r Improved method of testing for spatial autocorrelation for fish sp rich mod site}
 fish_sp_rich_glmm_site_resids <- simulateResiduals(fish_sp_rich_glmm_site)
 
 site_group_sp <- fish_sp_rich_df$site_code
@@ -3135,7 +3135,7 @@ group_locations_sp <- aggregate(fish_sp_rich_df[, c("easting_km", "northing_km")
 fish_sp_rich_glmm_site_resids_2 <- recalculateResiduals(fish_sp_rich_glmm_site_resids, group = site_group_sp)
 testSpatialAutocorrelation(fish_sp_rich_glmm_site_resids_2, x = group_locations_sp$easting_km, y = group_locations_sp$northing_km)
 ```
-There is still spatial autocorrelation.
+No spatial autocorrelation
 
 #### Comparing fish sp richness models
 
@@ -3145,14 +3145,6 @@ AIC(fish_sp_rich_glmm,
   arrange(AIC)%>%
   mutate(delta_AIC = AIC - AIC[1])
 ```
-
-
-Because we are seeing spatial autocorrelation in the fish sp richness glmms I will try to do this model with sdmTMB to get account for the spatial autocorrelation.
-
-
-
-
-
 
 
 
