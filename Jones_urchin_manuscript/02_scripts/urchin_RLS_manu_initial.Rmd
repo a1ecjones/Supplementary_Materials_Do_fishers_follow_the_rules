@@ -3625,11 +3625,12 @@ dec_mod_glmm
 dec_mod_glmm_resids <- simulateResiduals(dec_mod_glmm)
 plot(dec_mod_glmm_resids)
 testDispersion(dec_mod_glmm_resids)
+testOutliers(dec_mod_glmm_fish_resids)
 
 hist(residuals(dec_mod_glmm))
 summary(dec_mod_glmm)
 
-#gaussian, poisson, not good. nbinom1 and nbinom2 good
+#gaussian, poisson, not good. nbinom1 and nbinom2 good. Going to go with nbinom1 because with nbinom2 the outlier test is borderline and is significant on some iterations of the DHARMa residuals
 ```
 
 ```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
@@ -3657,11 +3658,12 @@ dec_mod_glmm_site
 dec_mod_glmm_site_resids <- simulateResiduals(dec_mod_glmm_site)
 plot(dec_mod_glmm_site_resids)
 testDispersion(dec_mod_glmm_site_resids)
+testOutliers(dec_mod_glmm_site_resids)
 
 hist(residuals(dec_mod_glmm_site))
 summary(dec_mod_glmm_site)
 
-#
+#gaussian, poisson bad. nbinom1 good and nbinom2 good. Going to stick with 1 for consistency, but will possibly report both
 ```
 
 ```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
@@ -3681,7 +3683,7 @@ No spatial autocorrelation
 ```{r Dec mod glmm}
 dec_mod_glmm_fish <- glmmTMB(total_decapods ~ protection_status + total_fish,
                          data = overall_rls_data_final,
-                         family = glmmTMB::nbinom1())
+                         family = glmmTMB::nbinom2())
 
 dec_mod_glmm_fish
 
@@ -3692,7 +3694,7 @@ testDispersion(dec_mod_glmm_fish_resids)
 hist(residuals(dec_mod_glmm_fish))
 summary(dec_mod_glmm_fish)
 
-#gaussian, poisson, not good. nbinom1 and nbinom2 good, with a slight warning for nbinom1
+#gaussian, poisson, not good. nbinom1 and nbinom2 good, with a slight warning for nbinom1. Nbinom2 appears to be better for this model.
 ```
 
 ```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
@@ -3712,7 +3714,7 @@ No spatial autocorrelation.
 dec_mod_glmm_site_fish <- glmmTMB(total_decapods ~ protection_status + total_fish +
                                     (1|site_code),
                          data = overall_rls_data_final,
-                         family = glmmTMB::nbinom1())
+                         family = glmmTMB::nbinom2())
 
 dec_mod_glmm_site_fish
 
@@ -3723,7 +3725,7 @@ testDispersion(dec_mod_glmm_site_fish_resids)
 hist(residuals(dec_mod_glmm_site_fish))
 summary(dec_mod_glmm_site_fish)
 
-#
+#Gaussian and poisson looks bad. Warning in nbinom1 but resids look ok. Nbinom2 looks a bit better and no warning.
 ```
 
 ```{r Improved method of testing for spatial autocorrelation for dec mod no RE}
