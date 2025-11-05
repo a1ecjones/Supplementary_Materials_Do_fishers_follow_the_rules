@@ -2822,7 +2822,7 @@ summary(fish_ab_spatiotemp$sd_report, select = "fixed", p.value = TRUE)
 We can see by the p value for the second row that protection status is not a significant predictor of total fish abundance at a site.
 
 
-### Selecting best model for fish abundance
+#### Selecting best model for fish abundance
 
 ```{r Comparing models with and without random effects}
 AIC(fish_ab_no_spatial,
@@ -2834,7 +2834,7 @@ AIC(fish_ab_no_spatial,
 
 AIC for the spatial and spatiotemp models are very similar, but the spatiotemp model has better looking residuals so I am leaning towards using this one. The IID spatiotemp is 2 AIC better than the AR1 one but that seems to just be because it has one less degree of freedom. Also the IID has worse looking residuals with an error for quantile deviations.
 
-### Fish ab glmm
+#### Fish ab glmm
 
 ```{r Fish ab glmm}
 fish_ab_glmm <- glmmTMB(total_fish ~ protection_status,
@@ -2865,7 +2865,7 @@ testSpatialAutocorrelation(fish_ab_glmm_resids_2, x = group_locations$easting_km
 ```
 Depending on the family chosen there is or is not spatial autocorrelation. 
 
-### Fish ab glmm with site
+#### Fish ab glmm with site
 
 ```{r Fish ab glmm}
 fish_ab_glmm_site <- glmmTMB(total_fish ~ protection_status + (1|site_code),
@@ -3117,7 +3117,7 @@ testDispersion(fish_sp_rich_glmm_site_resids)
 hist(residuals(fish_sp_rich_glmm_site))
 summary(fish_sp_rich_glmm_site)
 shapiro.test(residuals(fish_sp_rich_glmm_site))
-#gaussian bad. Poisson bad, nbinom1 has model convergence warning but good looking residuals, nbinom2 good.  
+#gaussian bad. Poisson bad, nbinom1 has model convergence warning but good looking residuals, nbinom2 good. 
 ```
 
 ```{r Plotting effects}
@@ -3146,6 +3146,7 @@ AIC(fish_sp_rich_glmm,
   mutate(delta_AIC = AIC - AIC[1])
 ```
 
+The model with site included as a random effect appears much better than the model without, even with the added degree of freedom.
 
 
 ### Species specific to protected or unprotected areas
@@ -3572,7 +3573,7 @@ ae <- effects::allEffects(urch_mod_glmm_site_fish)
 plot(ae)
 ```
 
-Resids look much improved to the model with fish and no site.
+Resids look improved to the model with fish and no site.
 
 ```{r Improved method of testing for spatial autocorrelation for urch mod site fish}
 urch_mod_glmm_site_fish_resids <- simulateResiduals(urch_mod_glmm_site_fish)
@@ -3752,7 +3753,7 @@ AIC(dec_mod_glmm,
   mutate(delta_AIC = AIC - AIC[1])
 ```
 
-The best fitting model appears to be the simple glmm with no random effects and without the fish variable.
+The best fitting model appears to be the simple glmm with no random effects and without the fish variable. Fish does not appear to be a significant predictor of total decapod abundance.
 
 
 ## Red turban snail modelling
@@ -3779,7 +3780,7 @@ snail_model_data <- overall_rls_data_final%>%
 
 ```{r Snail mod glmm}
 snail_mod_glmm <- glmmTMB(Pomaulax_gibberosus ~ protection_status,
-                         data = snail_model_data,
+                         data = overall_rls_data_final,
                          family = glmmTMB::nbinom1())
 
 snail_mod_glmm
@@ -3926,7 +3927,7 @@ AIC(snail_mod_glmm,
   mutate(delta_AIC = AIC - AIC[1])
 ```
 
-
+Overall, protection status seems to be a significant predictor of turban snail abundance. Fish does not appear to be, and the best performing model does not include fish.
 
 
 ## Kelp modelling
