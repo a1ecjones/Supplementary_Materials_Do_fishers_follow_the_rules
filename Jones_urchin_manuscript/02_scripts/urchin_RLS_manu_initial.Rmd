@@ -471,7 +471,7 @@ overall_rls_data_groups_with_openness <- merge(overall_rls_data_groups, openness
 ## Making a DF with fish sizes overall
 
 ```{r Expanding the long format data so that each individual fish has its own row}
-overall_rls_data_expanded <- overall_rls_data_raw_lat_long%>%
+overall_rls_data_expanded_initial <- overall_rls_data_raw_lat_long%>%
   filter(phylum == "Chordata")%>%
   filter(class != "Mammalia")%>%
   #This replicates each row by the number of counts of each fish in total
@@ -480,7 +480,7 @@ overall_rls_data_expanded <- overall_rls_data_raw_lat_long%>%
 
 ```{r Cleaning up the data and adding the necessary variables}
 #Removing unnecessary columns
-overall_rls_data_expanded <- overall_rls_data_expanded%>%
+overall_rls_data_expanded <- overall_rls_data_expanded_initial%>%
   select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
             "survey_latitude", "survey_longitude", "geom"))
 
@@ -1383,6 +1383,21 @@ unique_site_df$protection_status <- factor(unique_site_df$protection_status,
 
 unique_site_df$protection_status <- recode(unique_site_df$protection_status,
                                            unprotected = "UP", protected = "P")
+```
+
+
+```{r Calculating the mean mean number of boats}
+mean_mean_boats_protected <- mean(overall_rls_data_final$mean_rec_boat_counts_1km[overall_rls_data_final$protection_status == "protected"])
+
+mean_mean_boats_unprotected <- mean(overall_rls_data_final$mean_rec_boat_counts_1km[overall_rls_data_final$protection_status == "unprotected"])
+
+mean_mean_boats_unprotected/mean_mean_boats_protected
+
+max(overall_rls_data_final$mean_rec_boat_counts_2km[overall_rls_data_final$protection_status == "protected"])
+
+unproc_boats_df <- overall_rls_data_final%>%
+  filter(protection_status == "unprotected")%>%
+  select(site_code, site_name, mean_rec_boat_counts_1km, mean_rec_boat_counts_1.5km, mean_rec_boat_counts_2km)
 ```
 
 
@@ -2692,6 +2707,19 @@ hist(unprotected_total_fish$total_fish)
 protected_total_fish <- overall_rls_data_final%>%
   filter(protection_status == "protected")
 hist(protected_total_fish$total_fish)
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_fish))+
+  geom_boxplot()+
+  theme.figure()
+
+mean_protected_total_fish <- mean(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "protected"])
+sd_proc_total_fish <- sd(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "protected"])
+se_proc_total_fish <- sd_proc_total_fish/sqrt(length(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "protected"]))
+
+
+mean_unprotected_total_fish <- mean(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "unprotected"])
+sd_unproc_total_fish <- sd(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "unprotected"])
+se_unproc_total_fish <- sd_unproc_total_fish/sqrt(length(overall_rls_data_final$total_fish[overall_rls_data_final$protection_status == "unprotected"]))
 ```
 
 #### Fish ab no spatial
@@ -2833,6 +2861,31 @@ AIC(fish_ab_no_spatial,
 ```
 
 AIC for the spatial and spatiotemp models are very similar, but the spatiotemp model has better looking residuals so I am leaning towards using this one. The IID spatiotemp is 2 AIC better than the AR1 one but that seems to just be because it has one less degree of freedom. Also the IID has worse looking residuals with an error for quantile deviations.
+
+
+### Making a df with counts of only fish species
+
+```{r Fish abundance data frame}
+fish_abundance_df <- overall_rls_data_final%>%
+  select(site_code, site_name, latitude, longitude, survey_date, depth, protection_status,
+           Actinopterygii_spp., Anarrhichthys_ocellatus , Anoplarchus ,
+           Apodichthys_flavidus , Artedius_fenestralis , Artedius_harringtoni , Artedius_lateralis,
+           Ascelichthys_rhodorus , Asemichthys_taylori , Aulorhynchus_flavidus , Brachyistius_frenatus ,
+           Chirolophis_nugator , Citharichthys_stigmaeus , Clinocottus_acuticeps , Cottid_spp. ,
+           Cymatogaster_aggregata , Embiotoca_lateralis , Enophrys_bison , Gibbonsia_metzi , Gobiesox_maeandricus ,
+           Hemilepidotus , Hemilepidotus_hemilepidotus , Hemilepidotus_spinosus , Hexagrammos ,
+           Hexagrammos_decagrammus , Hexagrammos_stelleri , Jordania_zonope , Liparis_florae , Myoxocephalus_aenaeus ,
+           Myoxocephalus_polyacanthocephalus , Oligocottus_maculosus , Ophiodon_elongatus , Orthonopias_triacis,
+           Oxylebius_pictus , Phoca_vitulina , Pholis , Pholis_clemensi , Pholis_gunnellus , Pholis_laeta ,
+           Pholis_ornata , Pleuronichthys_coenosus , Porichthys_notatus, Rhacochilus_vacca ,
+           Rhamphocottus_richardsonii , Rhinogobiops_nicholsii , Rhinogobiops_nicholsii ,
+           Scorpaenichthys_marmoratus , Sebastes_caurinus , Sebastes_flavidus , Sebastes_maliger , Sebastes_melanops ,
+           Sebastes_nebulosus , Sebastes_pinniger , Sebastes_spp. , Synchirus_gilli , Zalophus_californianus , Percidae_spp.,
+           Embiotocidae_spp.)
+
+fish_sp <- c()
+
+```
 
 #### Fish ab glmm
 
@@ -3065,7 +3118,17 @@ protected_fish_sp_rich <- fish_sp_rich_df%>%
 hist(protected_fish_sp_rich$fish_sp_rich)
 
 ggplot(fish_sp_rich_df, aes(x = protection_status, y = fish_sp_rich))+
-  geom_boxplot()
+  geom_boxplot()+
+  theme.figure()
+
+mean_proc_fish_rich <- mean(fish_sp_rich_df$fish_sp_rich[fish_sp_rich_df$protection_status == "protected"])
+sd_proc_fish_rich <- sd(fish_sp_rich_df$fish_sp_rich[fish_sp_rich_df$protection_status == "protected"])
+se_proc_fish_rich <- sd_proc_fish_rich/sqrt(length(fish_sp_rich_df$fish_sp_rich[fish_sp_rich_df$protection_status == "protected"]))
+
+mean_unproc_fish_rich <- mean(fish_sp_rich_df$fish_sp_rich[fish_sp_rich_df$protection_status == "unprotected"])
+sd_unproc_fish_rich <- sd(fish_sp_rich_df$fish_sp_rich[fish_sp_rich_df$protection_status == "unprotected"])
+se_unproc_fish_rich <- sd_unproc_fish_rich/sqrt(length(fish_sp_rich_df$fish_sp_rich[fish_sp_rich_df$protection_status == "unprotected"]))
+
 ```
 
 #### Fish species richness glmm
@@ -3106,7 +3169,7 @@ NEED TO COMPARE ACROSS THE FOUR FAMILIES
 ```{r Fish sp rich glmm site}
 fish_sp_rich_glmm_site <- glmmTMB(fish_sp_rich ~ protection_status + (1|site_code),
                              data = fish_sp_rich_df,
-                             family = glmmTMB::nbinom2())
+                             family = glmmTMB::nbinom2(link = "log"))
 
 fish_sp_rich_glmm_site
 
@@ -3361,6 +3424,22 @@ I will try with a few different likely distributional families and then see whic
 hist(overall_rls_data_final$Mesocentrotus_franciscanus)
 hist(protected_total_fish$Mesocentrotus_franciscanus)
 hist(unprotected_total_fish$Mesocentrotus_franciscanus)
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Mesocentrotus_franciscanus))+
+  geom_boxplot()+
+  theme.figure()
+
+mean_proc_urch <- mean(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "protected"])
+sd_proc_urch <- sd(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "protected"])
+se_proc_urch <- sd_proc_urch/sqrt(length(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "protected"]))
+
+mean_unproc_urch <- mean(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "unprotected"])
+sd_unproc_urch <- sd(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "unprotected"])
+se_unproc_urch <- sd_unproc_urch/sqrt(length(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "unprotected"]))
+
+mean_total_urch <- mean(overall_rls_data_final$Mesocentrotus_franciscanus)
+sd_total_urch <- sd(overall_rls_data_final$Mesocentrotus_franciscanus)
+se_total_urch <- sd_total_urch/sqrt(length(overall_rls_data_final$Mesocentrotus_franciscanus))
 ```
 
 
@@ -3494,7 +3573,7 @@ Adding site as a random effect to account for multiple repeated samples at the s
 ```{r Urch mod glmmTMB with site}
 urch_mod_glmm_site <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + (1|site_code),
                          data = overall_rls_data_final,
-                         family = gaussian())
+                         family = gaussian(link = "identity"))
 
 urch_mod_glmm_site
 
@@ -3611,7 +3690,16 @@ hist(protected_total_fish$total_decapods)
 hist(unprotected_total_fish$total_decapods)
 
 ggplot(overall_rls_data_final, aes(x = protection_status, y = total_decapods))+
-  geom_boxplot()
+  geom_boxplot()+
+  theme.figure()
+
+mean_proc_deca <- mean(overall_rls_data_final$total_decapods[overall_rls_data_final$protection_status == "protected"])
+sd_proc_deca <- sd(overall_rls_data_final$total_decapods[overall_rls_data_final$protection_status == "protected"])
+se_proc_deca <- sd_proc_deca/sqrt(length(overall_rls_data_final$total_decapods[overall_rls_data_final$protection_status == "protected"]))
+
+mean_unproc_deca <- mean(overall_rls_data_final$total_decapods[overall_rls_data_final$protection_status == "unprotected"])
+sd_unproc_deca <- sd(overall_rls_data_final$total_decapods[overall_rls_data_final$protection_status == "unprotected"])
+se_unproc_deca <- sd_unproc_deca/sqrt(length(overall_rls_data_final$total_decapods[overall_rls_data_final$protection_status == "unprotected"]))
 ```
 
 ### Decapods glmm
@@ -3626,7 +3714,7 @@ dec_mod_glmm
 dec_mod_glmm_resids <- simulateResiduals(dec_mod_glmm)
 plot(dec_mod_glmm_resids)
 testDispersion(dec_mod_glmm_resids)
-testOutliers(dec_mod_glmm_fish_resids)
+testOutliers(dec_mod_glmm_resids)
 
 hist(residuals(dec_mod_glmm))
 summary(dec_mod_glmm)
@@ -3652,7 +3740,7 @@ No spatial autocorrelation for the decapod model.
 ```{r Dec mod glmm}
 dec_mod_glmm_site <- glmmTMB(total_decapods ~ protection_status + (1|site_code),
                          data = overall_rls_data_final,
-                         family = glmmTMB::nbinom1())
+                         family = glmmTMB::nbinom2(link = "log"))
 
 dec_mod_glmm_site
 
@@ -3764,7 +3852,22 @@ hist(protected_total_fish$Pomaulax_gibberosus)
 hist(unprotected_total_fish$Pomaulax_gibberosus)
 
 ggplot(overall_rls_data_final, aes(x = protection_status, y = Pomaulax_gibberosus))+
-  geom_boxplot()
+  geom_boxplot()+
+  theme.figure()
+
+mean_proc_snail <- mean(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$protection_status == "protected"])
+sd_proc_snail <- sd(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$protection_status == "protected"])
+se_proc_snail <- sd_proc_snail/sqrt(length(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$protection_status == "protected"]))
+
+mean_unproc_snail <- mean(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$protection_status == "unprotected"])
+sd_unproc_snail <- sd(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$protection_status == "unprotected"])
+se_unproc_snail <- sd_unproc_snail/sqrt(length(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$protection_status == "unprotected"]))
+
+mean_unproc_snail_no_eff <- mean(snail_model_data$Pomaulax_gibberosus[snail_model_data$protection_status == "unprotected"])
+sd_unproc_snail_no_eff <- sd(snail_model_data$Pomaulax_gibberosus[snail_model_data$protection_status == "unprotected"])
+se_unproc_snail_no_eff <- sd_unproc_snail/sqrt(length(snail_model_data$Pomaulax_gibberosus[snail_model_data$protection_status == "unprotected"]))
+
+print(overall_rls_data_final$Pomaulax_gibberosus[overall_rls_data_final$site_code == "BMSC13"])
 ```
 
 
@@ -3814,22 +3917,22 @@ No spatial autocorrelation.
 ### Snail glmm site
 
 ```{r Snail mod glmm site}
-snail_mod_glmm_site <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
-                         data = snail_model_data,
-                         family = glmmTMB::nbinom1())
+snail_mod_glmm_site <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1 + protection_status|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom2(link = "log"))
 
 snail_mod_glmm_site
 
 snail_mod_glmm_site_resids <- simulateResiduals(snail_mod_glmm_site)
 plot(snail_mod_glmm_site_resids)
+#plotResiduals(snail_mod_glmm_site_resids, overall_rls_data_final$protection_status)
 testDispersion(snail_mod_glmm_site_resids)
 testOutliers(snail_mod_glmm_site_resids)
 
 
 hist(residuals(snail_mod_glmm_site))
 summary(snail_mod_glmm_site)
-
-#gaussian, poisson, not good. nbinom1 looks good when outliers from effingham west removed.
+#gaussian, poisson, not good. nbinom1 has error. nbinom2 looks good
 ```
 
 
@@ -3837,13 +3940,19 @@ summary(snail_mod_glmm_site)
 snail_mod_glmm_site_resids <- simulateResiduals(snail_mod_glmm_site)
 
 
-site_group <- snail_model_data$site_code
-group_locations <- aggregate(snail_model_data[, c("easting_km", "northing_km")], list(site_group), mean)
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
 
 snail_mod_glmm_site_resids_2 <- recalculateResiduals(snail_mod_glmm_site_resids, group = site_group)
 testSpatialAutocorrelation(snail_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
 ```
 No spatial autocorrelation
+
+
+```{r}
+snail_mod_glmm_site_effects <- effects::allEffects(snail_mod_glmm_site)
+plot(snail_mod_glmm_site_effects)
+```
 
 
 ### Snail glmm fish
