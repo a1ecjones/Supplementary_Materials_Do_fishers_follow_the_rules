@@ -29,6 +29,8 @@ library(conflicted)
 library(metR)
 library(glmmTMB)
 library(DHARMa)
+library(car)
+library(ggeffects)
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
@@ -1174,7 +1176,8 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
          axis.text.y = element_text(angle = 45),
       legend.text = element_text(size = 12),
       legend.title = element_text(size = 14),
-      legend.margin = margin(0.3, 0.3, 0.3, 0.3)))
+      legend.margin = margin(0.3, 0.3, 0.3, 0.3))+
+  geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange"))
 ```
 
 
@@ -2627,6 +2630,113 @@ ggsave("rec_boat_KDE_sparr_23_map.png", plot = rec_boat_kde_sparr_map_23,
        path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
 ```
 
+
+## Testing the differences in rec boat counts between protected and non-protected with stats
+
+****WILL NEED TO EDIT THIS SECTION ONCE DONE****
+
+After seeing the clear trend of fewer boats on average around protected sites,
+we wanted to use stats to actually see if there was a significant difference
+between protected and unprotected sites.
+
+##### Checking for assumptions of linear models
+
+```{r Testing the variance between protection status}
+#In order to run stats tests on the boat counts we need to make sure the data
+#meets the assumptions of linear models. Here we use a levene's test to see
+#if there is equal variance between protected and unprotected sites. We do this
+#for each of the three radii.
+
+leveneTest(mean_rec_boat_counts_1km ~ protection_status, data = unique_site_df)
+leveneTest(mean_rec_boat_counts_1.5km ~ protection_status, data = unique_site_df)
+leveneTest(mean_rec_boat_counts_2km ~ protection_status, data = unique_site_df)
+```
+Equal variance for 1km, but not for 1.5km or 2km.
+
+```{r Normality of rec boat counts within protected sites}
+#The second assumption that we tested for was normality of the data. This chunk
+#makes a df that contains only sites within the protected areas to test for 
+#normality within this group.
+
+#Making data frame with only sites that are protected
+rec_boat_protected <- subset(unique_site_df, protection_status == "P")
+
+#Using shapiro wilks test to see if the mean rec boat counts are normal
+shapiro.test(rec_boat_protected$mean_rec_boat_counts_1km)
+#using histogram to look at normality visually
+hist(rec_boat_protected$mean_rec_boat_counts_1km)
+
+shapiro.test(rec_boat_protected$mean_rec_boat_counts_1.5km)
+hist(rec_boat_protected$mean_rec_boat_counts_1.5km)
+
+shapiro.test(rec_boat_protected$mean_rec_boat_counts_2km)
+hist(rec_boat_protected$mean_rec_boat_counts_2km)
+```
+Only the 1.5 km boat counts are normal
+
+```{r Normality of rec boat counts within non-protected sites}
+#This chunk follows the same steps as the previous one however it is for the 
+#unprotected sites.
+
+#Making data frame with only sites that are non-protected
+rec_boat_non_protected <- subset(unique_site_df, protection_status == "UP")
+
+shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_1km)
+hist(rec_boat_non_protected$mean_rec_boat_counts_1km)
+
+shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_1.5km)
+hist(rec_boat_non_protected$mean_rec_boat_counts_1.5km)
+
+shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_2km)
+hist(rec_boat_non_protected$mean_rec_boat_counts_2km)
+```
+2km is normal but the others are not.
+
+Because we have not met the assumptions of normality or homoscedasticity for 
+all of our groups we are not able to use linear models. Instead we used 
+Wilcoxon Rank sum tests.
+
+##### Wilcoxon rank sum tests of the mean recreational boat counts
+
+```{r Wilcoxon rank sum tests of mean rec boat counts between protected and non-protected sites}
+#These lines of code run a separate wilcoxon rank sum test for each of the three
+#radii that we looked at. Since alternative was set to "t" it is a two tailed
+#test
+wilcox_1km <- wilcox.test(mean_rec_boat_counts_1km ~ protection_status, data = unique_site_df, alternative = "t")
+wilcox_1.5km <- wilcox.test(mean_rec_boat_counts_1.5km ~ protection_status, data = unique_site_df, alternative = "t")
+wilcox_2km <- wilcox.test(mean_rec_boat_counts_2km ~ protection_status, data = unique_site_df, alternative = "t")
+
+print(wilcox_1km)
+print(wilcox_1.5km)
+print(wilcox_2km)
+```
+All of the wilcoxon rank sum tests indicate that there is a highly significant
+difference in the number of rec fishing boats between protected and non-protected
+sites. Based on the boxplots we can say that there are significantly more rec
+boats at unprotected sites than protected sites.
+
+##### Calculating means and standard errors for the boat counts
+
+```{r Calculating mean and standard errors for the boat counts}
+mean_proc_boats_2km <- mean(unique_site_df$mean_rec_boat_counts_2km[unique_site_df$protection_status == "P"])
+sd_proc_boats_2km <- sd(unique_site_df$mean_rec_boat_counts_2km[unique_site_df$protection_status == "P"])
+se_proc_boats_2km <- sd_proc_boats_2km/sqrt(length(unique_site_df$mean_rec_boat_counts_2km[unique_site_df$protection_status == "P"]))
+
+mean_unproc_boats_2km <- mean(unique_site_df$mean_rec_boat_counts_2km[unique_site_df$protection_status == "UP"])
+sd_unproc_boats_2km <- sd(unique_site_df$mean_rec_boat_counts_2km[unique_site_df$protection_status == "UP"])
+se_unproc_boats_2km <- sd_unproc_boats_2km/sqrt(length(unique_site_df$mean_rec_boat_counts_2km[unique_site_df$protection_status == "UP"]))
+
+mean_proc_boats_1km <- mean(unique_site_df$mean_rec_boat_counts_1km[unique_site_df$protection_status == "P"])
+sd_proc_boats_1km <- sd(unique_site_df$mean_rec_boat_counts_1km[unique_site_df$protection_status == "P"])
+se_proc_boats_1km <- sd_proc_boats_1km/sqrt(length(unique_site_df$mean_rec_boat_counts_1km[unique_site_df$protection_status == "P"]))
+
+mean_unproc_boats_1km <- mean(unique_site_df$mean_rec_boat_counts_1km[unique_site_df$protection_status == "UP"])
+sd_unproc_boats_1km <- sd(unique_site_df$mean_rec_boat_counts_1km[unique_site_df$protection_status == "UP"])
+se_unproc_boats_1km <- sd_unproc_boats_1km/sqrt(length(unique_site_df$mean_rec_boat_counts_1km[unique_site_df$protection_status == "UP"]))
+```
+
+
+
 # Initial modelling
 
 I will be using the sdmTMB package to create models looking at the abundances/densities of urchins, fish, and other invertebrates at the RLS sites within Barkley Sound. The models will be based on the protection status of the survey sites as the predictor variable.
@@ -2867,7 +2977,7 @@ AIC for the spatial and spatiotemp models are very similar, but the spatiotemp m
 
 ```{r Fish abundance data frame}
 fish_abundance_df <- overall_rls_data_final%>%
-  select(site_code, site_name, latitude, longitude, survey_date, depth, protection_status,
+  select(
            Actinopterygii_spp., Anarrhichthys_ocellatus , Anoplarchus ,
            Apodichthys_flavidus , Artedius_fenestralis , Artedius_harringtoni , Artedius_lateralis,
            Ascelichthys_rhodorus , Asemichthys_taylori , Aulorhynchus_flavidus , Brachyistius_frenatus ,
@@ -2881,10 +2991,18 @@ fish_abundance_df <- overall_rls_data_final%>%
            Rhamphocottus_richardsonii , Rhinogobiops_nicholsii , Rhinogobiops_nicholsii ,
            Scorpaenichthys_marmoratus , Sebastes_caurinus , Sebastes_flavidus , Sebastes_maliger , Sebastes_melanops ,
            Sebastes_nebulosus , Sebastes_pinniger , Sebastes_spp. , Synchirus_gilli , Zalophus_californianus , Percidae_spp.,
-           Embiotocidae_spp.)
+           Embiotocidae_spp.)%>%
+  summarise(across(everything(), mean))%>%
+  pivot_longer(everything(),
+    names_to = "species",
+               values_to = "mean_count")
 
-fish_sp <- c()
 
+sd_be_goby <- sd(overall_rls_data_final$Rhinogobiops_nicholsii)
+se_be_goby <- sd_be_goby/sqrt(length(overall_rls_data_final$Rhinogobiops_nicholsii))
+
+sd_kelp_greenling <- sd(overall_rls_data_final$Hexagrammos_decagrammus)
+se_kelp_greenling <- sd_kelp_greenling/sqrt(length(overall_rls_data_final$Hexagrammos_decagrammus))
 ```
 
 #### Fish ab glmm
@@ -4042,4 +4160,66 @@ Overall, protection status seems to be a significant predictor of turban snail a
 ## Kelp modelling
 
 I would like to model the kelp to see if it is more likely to have a kelp site present in the protected areas vs the unprotected areas. However, since the sites are not chosen randomly, and they were specifically chosen as kelp sites then this might not be valid. Need to check on this first.
+
+
+
+# Making plots of the models
+
+## Fish species richness
+
+### Predicting means with CI
+
+```{r Predicting fish species richness mean etc}
+fish_sp_rich_sum_stats <- ggpredict(fish_sp_rich_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                fish_sp_rich = predicted) %>% 
+  as.data.frame()
+```
+
+## Urchin abundance
+
+### Predicting means with CI
+
+```{r Predicting urchin abundance mean}
+urchin_ab_sum_stats <- ggpredict(urch_mod_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                urchin_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+
+## Total decapod abundance
+
+### Predicting means with CI
+
+```{r Predicting decapod abundance mean}
+total_decapod_sum_stats <- ggpredict(dec_mod_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                dec_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+
+## Snail abundance
+
+### Predicting means with CI
+
+```{r Predicting snail abundance mean}
+snail_ab_sum_stats <- ggpredict(snail_mod_glmm_site,
+                               terms = c("protection_status", "site_code"),
+                               type = "random",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                snail_abundance = predicted) %>% 
+  as.data.frame()
+```
 
