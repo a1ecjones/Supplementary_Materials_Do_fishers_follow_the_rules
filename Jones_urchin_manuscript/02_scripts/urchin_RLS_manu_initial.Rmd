@@ -34,6 +34,7 @@ library(ggeffects)
 
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
+conflict_prefer("recode", "dplyr")
 ```
 
 For this project I am continuing on from the work I did for my Honours and pivoting away from just looking at the red turban snails and red sea urchins within Barkley Sound based on environmental drivers and protection from fishing status. I will be looking at only protection from fishing status and looking at urchins in general, fish, and kelp communities to get a more complete picture of the effectiveness or lack thereof of protected areas within Barkley Sound.
@@ -976,6 +977,9 @@ overall_rls_data_final <- overall_rls_data_groups_with_openness%>%
  left_join(rec_fishing_boat_total_radius_1.5km_final, by = c("site_code"))%>%
   left_join(rec_fishing_boat_total_radius_2km_final, by = c("site_code"))%>%
   replace(is.na(.), 0)
+
+
+length(unique(overall_rls_data_final$site_code[overall_rls_data_final$protection_status == "unprotected"]))
 ```
 
 
@@ -1146,8 +1150,6 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
               mapping = aes(x = longitude, y = latitude, fill = protection_status),
               shape = 21, size = 3,
               colour = "black")+
-   #This specifies the different shapes to be used to differentiate
-   #between the different regions
    scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
   # scale_shape_manual(values = c(24, 21, 22, 23))+
    #Specifies the colours for unprotected and protected sites
@@ -1373,6 +1375,30 @@ ggsave("rec_boat_impacts_2km_mean.pdf", plot = rec_boat_impacts_2km_mean,
 ```
 
 
+
+## Testing site-level boat counts across years
+
+```{r}
+ggplot(rec_fishing_boat_total_radius_1km_complete, aes(x = Year, y = yearly_rec_boats_fishing, colour = site_code))+
+  geom_line()+
+  geom_point()+
+  labs(title = "1km")+
+  theme.figure()
+
+ggplot(rec_fishing_boat_total_radius_1.5km_complete, aes(x = Year, y = yearly_rec_boats_fishing, colour = site_code))+
+  geom_line()+
+  geom_point()+
+  labs(title = "1.5km")+
+  theme.figure()
+
+ggplot(rec_fishing_boat_total_radius_2km_complete, aes(x = Year, y = yearly_rec_boats_fishing, colour = site_code))+
+  geom_line()+
+  geom_point()+
+  labs(title = "2km")+
+  theme.figure()
+```
+
+
 ## Figure 3: Boxplots of number of boats between protected and unprotected sites
 
 ```{r Making a data frame with only unique rows for the sites}
@@ -1382,10 +1408,10 @@ unique_site_df <- overall_rls_data_final%>%
 
 #Reordering the levels of protection status so unprotected is first
 unique_site_df$protection_status <- factor(unique_site_df$protection_status,
-                                           levels = c("unprotected", "protected"))
+                                           levels = c("protected", "unprotected"))
 
 unique_site_df$protection_status <- recode(unique_site_df$protection_status,
-                                           unprotected = "UP", protected = "P")
+                                           protected = "P", unprotected = "UP")
 ```
 
 
@@ -1414,7 +1440,7 @@ unproc_boats_df <- overall_rls_data_final%>%
    #true boat count values
   geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
   labs(x = "Protection Status", y = "Mean rec.\nboat counts")+
-     scale_fill_manual(values = c("#E95E48", "#355173"))+
+     scale_fill_manual(values = c("#355173", "#E95E48"))+
   theme.figure()+
    theme(legend.position = "none",
      #    axis.text.x = element_blank(),
@@ -1429,7 +1455,7 @@ unproc_boats_df <- overall_rls_data_final%>%
   geom_boxplot(alpha = 0.6, width = 0.4)+
   geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
   labs(x = "Protection Status", y = "Mean rec.\nboat counts")+
-     scale_fill_manual(values = c("#E95E48", "#355173"))+
+     scale_fill_manual(values = c("#355173", "#E95E48"))+
   theme.figure()+
    theme(legend.position = "none"))
      #    axis.text.x = element_blank(),
@@ -1445,7 +1471,7 @@ unproc_boats_df <- overall_rls_data_final%>%
   geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
   labs(x = "Protection Status", y = "Mean rec.\nboat counts",
        fill = "Protection Status")+
-     scale_fill_manual(values = c("#E95E48", "#355173"))+
+     scale_fill_manual(values = c("#355173", "#E95E48"))+
   theme.figure()+
    theme(legend.position = "none",
      axis.title.y = element_blank()))
@@ -1842,6 +1868,9 @@ ggplot(overall_rls_data_final, aes(x = kelp, y = Pomaulax_gibberosus))+
 ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Pomaulax_gibberosus))+
   geom_boxplot()+
   theme.figure()
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = kelp))+
+  geom_jitter(height = 0)
 ```
 
 
@@ -2160,7 +2189,7 @@ rec_boats_within_broken_group_RCA <- st_intersection(broken_group_RCA, rec_boats
 
 rec_boats_within_baeria_rocks_er <- st_intersection(baeria_rocks_er, rec_boats_fishing_total_points_wgs84)
 
-rec_boats_within_folger_pass_RCA <- st_intersection(folger_pass_RCA, rec_boats_fishing_total_points_wgs84)
+#rec_boats_within_folger_pass_RCA <- st_intersection(folger_pass_RCA, #rec_boats_fishing_total_points_wgs84)
 ```
 
 ```{r Filtering the Numukamis Bay boats to only include ones fishing there when it is actually closed}
@@ -2176,17 +2205,19 @@ rec_boats_within_numukamis_final <- rec_boats_within_numukamis%>%
 total_boats_broken_group_RCA <- sum(rec_boats_within_broken_group_RCA$rec_boats_fishing)
 total_boats_baeria_rocks_er <- sum(rec_boats_within_baeria_rocks_er$rec_boats_fishing)
 total_boats_numukamis <- sum(rec_boats_within_numukamis_final$rec_boats_fishing)
-total_boats_folger_pass_RCA <- sum(rec_boats_within_folger_pass_RCA$rec_boats_fishing)
+#total_boats_folger_pass_RCA <- sum(rec_boats_within_folger_pass_RCA$rec_boats_fishing)
 
 #This adds up all of the boats for a total number spotted across all protected
 #areas
 total_boats_in_protected_areas <- total_boats_broken_group_RCA + total_boats_baeria_rocks_er +
-  total_boats_numukamis + total_boats_folger_pass_RCA
+  total_boats_numukamis #+ total_boats_folger_pass_RCA
 
 #This adds up all of the rec boats fishing that were spotted within Barkley 
 #Sound.
 total_boats_spotted_barkley <- sum(rec_boats_fishing_total$rec_boats_fishing)
-
+total_boats_spotted_barkley_2021 <- sum(rec_boats_fishing2021_subset$rec_boats_fishing)
+total_boats_spotted_barkley_2022 <- sum(rec_boats_fishing2022_subset$rec_boats_fishing)
+total_boats_spotted_barkley_2023 <- sum(rec_boats_fishing2023_subset$rec_boats_fishing)
 
 #This line calculate the percentage of observations found in protected areas
 percent_boats_in_protected_areas <- (total_boats_in_protected_areas/total_boats_spotted_barkley) * 100
@@ -2452,9 +2483,9 @@ threshold_95 <- quantile(rec_boat_kde_overall_df$layer, 0.95, na.rm = TRUE)
     breaks = threshold_80            # number of contour levels (adjust as needed)
   ) +
   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
-      geom_sf(data = broken_group_RCA, fill = "white", colour ="white", alpha = 0.1)+
-   geom_sf(data = numukamis_area, fill = "white", colour = "white", alpha = 0.2)+
-   geom_sf(data = baeria_rocks_er, fill = "white", colour = "white", alpha = 0.2)+
+      geom_sf(data = broken_group_RCA, fill = "white", colour ="white", alpha = 0.3, linewidth = 1)+
+   geom_sf(data = numukamis_area, fill = "white", colour = "white", alpha = 0.3, linewidth = 1)+
+   geom_sf(data = baeria_rocks_er, fill = "white", colour = "white", alpha = 0.3, linewidth = 1)+
   scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
                        guide = guide_colorbar(barheight = unit(2.1, "cm")))+
      coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
@@ -3547,17 +3578,17 @@ ggplot(overall_rls_data_final, aes(x = protection_status, y = Mesocentrotus_fran
   geom_boxplot()+
   theme.figure()
 
-mean_proc_urch <- mean(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "protected"])
-sd_proc_urch <- sd(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "protected"])
-se_proc_urch <- sd_proc_urch/sqrt(length(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "protected"]))
+mean_proc_urch <- mean(overall_rls_data_final$total_urchins[overall_rls_data_final$protection_status == "protected"])
+sd_proc_urch <- sd(overall_rls_data_final$total_urchins[overall_rls_data_final$protection_status == "protected"])
+se_proc_urch <- sd_proc_urch/sqrt(length(overall_rls_data_final$total_urchins[overall_rls_data_final$protection_status == "protected"]))
 
-mean_unproc_urch <- mean(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "unprotected"])
-sd_unproc_urch <- sd(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "unprotected"])
-se_unproc_urch <- sd_unproc_urch/sqrt(length(overall_rls_data_final$Mesocentrotus_franciscanus[overall_rls_data_final$protection_status == "unprotected"]))
+mean_unproc_urch <- mean(overall_rls_data_final$total_urchins[overall_rls_data_final$protection_status == "unprotected"])
+sd_unproc_urch <- sd(overall_rls_data_final$total_urchins[overall_rls_data_final$protection_status == "unprotected"])
+se_unproc_urch <- sd_unproc_urch/sqrt(length(overall_rls_data_final$total_urchins[overall_rls_data_final$protection_status == "unprotected"]))
 
-mean_total_urch <- mean(overall_rls_data_final$Mesocentrotus_franciscanus)
-sd_total_urch <- sd(overall_rls_data_final$Mesocentrotus_franciscanus)
-se_total_urch <- sd_total_urch/sqrt(length(overall_rls_data_final$Mesocentrotus_franciscanus))
+mean_total_urch <- mean(overall_rls_data_final$total_urchins)
+sd_total_urch <- sd(overall_rls_data_final$total_urchins)
+se_total_urch <- sd_total_urch/sqrt(length(overall_rls_data_final$total_urchins))
 ```
 
 
@@ -3689,7 +3720,7 @@ No spatial autocorrelation for urchins.
 Adding site as a random effect to account for multiple repeated samples at the same site both within years and over the years
 
 ```{r Urch mod glmmTMB with site}
-urch_mod_glmm_site <- glmmTMB(Mesocentrotus_franciscanus ~ protection_status + (1|site_code),
+urch_mod_glmm_site <- glmmTMB(total_urchins ~ protection_status + (1|site_code),
                          data = overall_rls_data_final,
                          family = gaussian(link = "identity"))
 
@@ -3969,7 +4000,7 @@ hist(overall_rls_data_final$Pomaulax_gibberosus)
 hist(protected_total_fish$Pomaulax_gibberosus)
 hist(unprotected_total_fish$Pomaulax_gibberosus)
 
-ggplot(overall_rls_data_final, aes(x = protection_status, y = Pomaulax_gibberosus))+
+ggplot(snail_model_data, aes(x = protection_status, y = Pomaulax_gibberosus))+
   geom_boxplot()+
   theme.figure()
 
@@ -4035,7 +4066,7 @@ No spatial autocorrelation.
 ### Snail glmm site
 
 ```{r Snail mod glmm site}
-snail_mod_glmm_site <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1 + protection_status|site_code),
+snail_mod_glmm_site <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
                          data = overall_rls_data_final,
                          family = glmmTMB::nbinom2(link = "log"))
 
@@ -4072,6 +4103,45 @@ snail_mod_glmm_site_effects <- effects::allEffects(snail_mod_glmm_site)
 plot(snail_mod_glmm_site_effects)
 ```
 
+### Snail glmm site no outliers
+
+```{r Snail mod glmm site}
+snail_mod_glmm_site_no_outliers <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
+                         data = snail_model_data,
+                         family = glmmTMB::nbinom1(link = "log"))
+
+snail_mod_glmm_site_no_outliers
+
+snail_mod_glmm_site_no_outliers_resids <- simulateResiduals(snail_mod_glmm_site_no_outliers)
+plot(snail_mod_glmm_site_no_outliers_resids)
+#plotResiduals(snail_mod_glmm_site_resids, overall_rls_data_final$protection_status)
+testDispersion(snail_mod_glmm_site_no_outliers_resids)
+testOutliers(snail_mod_glmm_site_no_outliers_resids)
+
+
+hist(residuals(snail_mod_glmm_site_no_outliers))
+summary(snail_mod_glmm_site_no_outliers)
+#gaussian, poisson, not good. nbinom1 has error. nbinom2 looks good
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for snail mod no outliers}
+snail_mod_glmm_site_no_outliers_resids <- simulateResiduals(snail_mod_glmm_site_no_outliers)
+
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_site_no_outliers_resids_2 <- recalculateResiduals(snail_mod_glmm_site_no_outliers_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_site_no_outliers_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation
+
+
+```{r}
+snail_mod_glmm_site_no_outliers_effects <- effects::allEffects(snail_mod_glmm_site_no_outliers)
+plot(snail_mod_glmm_site_no_outliers_effects)
+```
 
 ### Snail glmm fish
 
@@ -4157,6 +4227,55 @@ AIC(snail_mod_glmm,
 Overall, protection status seems to be a significant predictor of turban snail abundance. Fish does not appear to be, and the best performing model does not include fish.
 
 
+
+## Pycno modelling
+
+```{r pycno mod glmm site}
+pycno_mod_glmm_site <- glmmTMB(Pycnopodia_helianthoides ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom2())
+
+pycno_mod_glmm_site
+
+pycno_mod_glmm_site_resids <- simulateResiduals(pycno_mod_glmm_site)
+plot(pycno_mod_glmm_site_resids)
+#plotResiduals(pycno_mod_glmm_site_resids, overall_rls_data_final$protection_status)
+testDispersion(pycno_mod_glmm_site_resids)
+testOutliers(pycno_mod_glmm_site_resids)
+
+
+hist(residuals(pycno_mod_glmm_site))
+summary(pycno_mod_glmm_site)
+#gaussian, poisson, not good. nbinom1 has error. nbinom2 looks good
+```
+
+
+```{r Improved method of testing for spatial autocorrelation for pycno mod}
+pycno_mod_glmm_site_resids <- simulateResiduals(pycno_mod_glmm_site)
+
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+pycno_mod_glmm_site_resids_2 <- recalculateResiduals(pycno_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(pycno_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+
+```{r}
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Pycnopodia_helianthoides))+
+  geom_boxplot()+
+  theme.figure()
+
+mean_proc_pycno <- mean(overall_rls_data_final$Pycnopodia_helianthoides[overall_rls_data_final$protection_status == "protected"])
+sd_proc_pycno <- sd(overall_rls_data_final$Pycnopodia_helianthoides[overall_rls_data_final$protection_status == "protected"])
+se_proc_pycno <- sd_proc_pycno/sqrt(length(overall_rls_data_final$Pycnopodia_helianthoides[overall_rls_data_final$protection_status == "protected"]))
+
+mean_unproc_pycno <- mean(overall_rls_data_final$Pycnopodia_helianthoides[overall_rls_data_final$protection_status == "unprotected"])
+sd_unproc_pycno <- sd(overall_rls_data_final$Pycnopodia_helianthoides[overall_rls_data_final$protection_status == "unprotected"])
+se_unproc_pycno <- sd_unproc_pycno/sqrt(length(overall_rls_data_final$Pycnopodia_helianthoides[overall_rls_data_final$protection_status == "unprotected"]))
+```
+
+
 ## Kelp modelling
 
 I would like to model the kelp to see if it is more likely to have a kelp site present in the protected areas vs the unprotected areas. However, since the sites are not chosen randomly, and they were specifically chosen as kelp sites then this might not be valid. Need to check on this first.
@@ -4164,6 +4283,46 @@ I would like to model the kelp to see if it is more likely to have a kelp site p
 
 
 # Making plots of the models
+
+## Fish abundance model
+
+### Predicting means with CI
+
+```{r Predicting fish abundance mean etc}
+fish_ab_sum_stats <- emmeans::emmeans(fish_ab_spatiotemp, ~ protection_status, type = "response")
+
+confint(fish_ab_sum_stats)
+fish_ab_sum_stats<- as.data.frame(confint(fish_ab_sum_stats))
+#must use emmeans because ggpredict does not work with sdmTMB
+#fish_ab_sum_stats <- ggpredict(fish_ab_spatiotemp,
+ #                              terms = c("protection_status"),
+  #                             type = "fixed",
+   #                            bias_correction = TRUE) %>%
+  #dplyr::rename(protection_status = x,
+   #             fish_ab = predicted) %>% 
+  #as.data.frame()
+```
+
+### Making plot with the predicted means
+
+```{r Plotting fish abundance with predictions}
+(fish_ab_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = total_fish))+
+  #geom_jitter(data = fish_sp_rich_df, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+   geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = fish_ab_sum_stats, aes(x = protection_status, y = response),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = fish_ab_sum_stats, aes(x = protection_status, y = response,
+                                                ymin = lower.CL, ymax = upper.CL),
+               colour = "black", width = 0.2, linewidth = 1.2)+
+  #scale_y_continuous(breaks = c(2, 4, 6, 8, 10, 12), limits = c(2, 12))+
+  labs(x = "Protection Status", y = "Total fish\ncounts")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
 
 ## Fish species richness
 
@@ -4177,7 +4336,31 @@ fish_sp_rich_sum_stats <- ggpredict(fish_sp_rich_glmm_site,
   dplyr::rename(protection_status = x,
                 fish_sp_rich = predicted) %>% 
   as.data.frame()
+
+emmeans::emmeans(fish_sp_rich_glmm_site, ~protection_status, type = "response")
 ```
+
+### Making plot with predicted means
+
+```{r Plotting fish sp richness with predictions}
+(fish_sp_rich_mod_plot <- ggplot(fish_sp_rich_df, aes(x = protection_status, y = fish_sp_rich))+
+  #geom_jitter(data = fish_sp_rich_df, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+   geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = fish_sp_rich_sum_stats, aes(x = protection_status, y = fish_sp_rich),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = fish_sp_rich_sum_stats, aes(x = protection_status, y = fish_sp_rich,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  scale_y_continuous(breaks = c(2, 4, 6, 8, 10, 12), limits = c(2, 12))+
+  labs(x = "Protection Status", y = "Fish species\nrichness")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
 
 ## Urchin abundance
 
@@ -4191,6 +4374,26 @@ urchin_ab_sum_stats <- ggpredict(urch_mod_glmm_site,
   dplyr::rename(protection_status = x,
                 urchin_abundance = predicted) %>% 
   as.data.frame()
+```
+
+### Making plot with predicted means
+
+```{r Plotting urchin abundance with predictions}
+(urch_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = total_urchins))+
+ # geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = urchin_ab_sum_stats, aes(x = protection_status, y = urchin_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = urchin_ab_sum_stats, aes(x = protection_status, y = urchin_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Sea urchin counts")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
 ```
 
 
@@ -4208,18 +4411,93 @@ total_decapod_sum_stats <- ggpredict(dec_mod_glmm_site,
   as.data.frame()
 ```
 
+```{r Plotting decapod abundance with predictions}
+(decapod_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = total_decapods))+
+  #geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = total_decapod_sum_stats, aes(x = protection_status, y = dec_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = total_decapod_sum_stats, aes(x = protection_status, y = dec_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Decapod counts")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none"))
+```
+
 
 ## Snail abundance
 
 ### Predicting means with CI
 
 ```{r Predicting snail abundance mean}
-snail_ab_sum_stats <- ggpredict(snail_mod_glmm_site,
-                               terms = c("protection_status", "site_code"),
-                               type = "random",
+snail_ab_sum_stats <- ggpredict(snail_mod_glmm_site_no_outliers,
+                               terms = c("protection_status"),
+                              type = "fixed",
                                bias_correction = TRUE) %>%
   dplyr::rename(protection_status = x,
                 snail_abundance = predicted) %>% 
   as.data.frame()
 ```
 
+```{r Plotting pycno abundance with predictions}
+(snail_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = Pomaulax_gibberosus))+
+ # geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey", outliers = FALSE)+
+  geom_point(data = snail_ab_sum_stats, aes(x = protection_status, y = snail_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = snail_ab_sum_stats, aes(x = protection_status, y = snail_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Red turban\nsnail counts")+
+  # scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
+
+## Pycno abundance
+
+### Predicting means with CI
+
+```{r Predicting pycno abundance mean}
+pycno_sum_stats <- ggpredict(pycno_mod_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                pycno_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+```{r Plotting pycno abundance with predictions}
+(pycno_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = Pycnopodia_helianthoides))+
+ # geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = pycno_sum_stats, aes(x = protection_status, y = pycno_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = pycno_sum_stats, aes(x = protection_status, y = pycno_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Sunflower sea\nstar counts")+
+  # scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none"))
+```
+
+## Combining the five into a multipanel plot
+
+```{r}
+(ecological_test_plot <- (fish_sp_rich_mod_plot + fish_ab_mod_plot)/(urch_mod_plot + snail_mod_plot)/(decapod_mod_plot + pycno_mod_plot))
+```
+
+## Saving as a pdf for export
+
+```{r Saving the rec boat counts boxplot figure}
+ggsave("ecological_test_plot.pdf", plot = ecological_test_plot,
+       path = here("./04_plots/manuscript_figures"), width = 160, height = 200, units = "mm")
+```
