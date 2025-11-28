@@ -1179,7 +1179,8 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
       legend.text = element_text(size = 12),
       legend.title = element_text(size = 14),
       legend.margin = margin(0.3, 0.3, 0.3, 0.3))+
-  geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange"))
+  geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange")+
+  geom_point(aes(x = -125.082355, y = 48.966445), shape = 24, size = 5, fill = "#73D055FF"))
 ```
 
 
@@ -1871,6 +1872,9 @@ ggplot(overall_rls_data_final, aes(x = kelp_pa, y = Pomaulax_gibberosus))+
 
 ggplot(overall_rls_data_final, aes(x = protection_status, y = kelp))+
   geom_jitter(height = 0)
+
+wolf_eel <- overall_rls_data_final%>%
+  select(site_code, site_name, protection_status, Anarrhichthys_ocellatus)
 ```
 
 
@@ -3559,6 +3563,80 @@ To visualize this data, we will have a list of species with a bar to the right. 
 ```{r}
 ggsave("sp_specificity_plot.pdf", plot = sp_specificity_plot,
        path = here("./04_plots/manuscript_figures"), width = 210, height = 800, units = "mm")
+```
+
+
+
+### B20 Modelling for fish
+
+#### Creating a dataframe
+
+To look at B20 impacts we need to make a data frame with only observations of fish greater than 20 cm in length, and then have counts or biomass for each transect
+
+```{r Creating a B20 dataframe}
+b20_df <- overall_rls_data_raw_lat_long_updated_names%>%
+  select(site_code, site_name, latitude, longitude, survey_date, depth, 
+         visibility, phylum, class, order, family, species_name, reporting_name, 
+         size_class, total, biomass)%>%
+  filter(phylum == "Chordata")%>%
+  filter(class != "Mammalia")%>%
+  filter(size_class >= 20)%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+b20_df <- b20_df[,c(1, 2, 17, seq(3, 16, by = 1))]
+
+##print(unique(overall_rls_data_clean$reporting_name))
+
+b20_df$site_code <- as.factor(b20_df$site_code)
+b20_df$site_name <- as.factor(b20_df$site_name)
+b20_df$protection_status <- as.factor(b20_df$protection_status)
+```
+
+```{r Summing Biomass for each transect}
+b20_final_df <- b20_df%>%
+  group_by(site_code, site_name, protection_status, latitude, longitude, survey_date, depth)%>%
+  summarise(b20_biomass = sum(biomass/1000))
+```
+
+#### Initial looks at B20 between protection levels
+
+```{r}
+ggplot(b20_final_df, aes(x = protection_status, y = b20_biomass))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+#### Modelling the B20 biomass
+
+##### Looking at B20 biomass distribution
+
+```{r}
+hist(b20_final_df$b20_biomass)
+```
+
+##### B20 mod with site
+
+```{r B20 glmm}
+b20_mod_site <- glmmTMB(b20_biomass ~ protection_status + (1|site_code),
+                        data = b20_final_df,
+                        family = glmmTMB)
+
+b20_mod_site
+
+b20_mod_site_resids <- simulateResiduals(b20_mod_site)
+plot(b20_mod_site_resids)
+
+summary(b20_mod_site)
 ```
 
 
