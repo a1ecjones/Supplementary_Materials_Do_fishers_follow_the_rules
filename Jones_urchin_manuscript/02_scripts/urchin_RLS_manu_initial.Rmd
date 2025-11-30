@@ -3580,7 +3580,13 @@ b20_df <- overall_rls_data_raw_lat_long_updated_names%>%
          size_class, total, biomass)%>%
   filter(phylum == "Chordata")%>%
   filter(class != "Mammalia")%>%
-  filter(size_class >= 20)%>%
+  
+  #This will make the biomass of all observations less than 20 equal to 0. Then
+  #when I sum the biomass in the later step the sites that do not have any
+  #fish over 20cm will still be there but have a b20 of 0
+  mutate(biomass = if_else(size_class < 20,
+                           0,
+                           biomass))%>%
   filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
                           "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
                           "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
@@ -3605,7 +3611,12 @@ b20_df$protection_status <- as.factor(b20_df$protection_status)
 ```{r Summing Biomass for each transect}
 b20_final_df <- b20_df%>%
   group_by(site_code, site_name, protection_status, latitude, longitude, survey_date, depth)%>%
-  summarise(b20_biomass = sum(biomass/1000))
+  summarise(b20_biomass = sum((biomass/1000)))
+
+
+#adding total fish abundance to see if it correlates with B20
+b20_abundance_df <- b20_final_df%>%
+  left_join(overall_rls_data_final, by = c("site_code", "site_name", "survey_date", "depth", "protection_status"))
 ```
 
 #### Initial looks at B20 between protection levels
@@ -3613,6 +3624,10 @@ b20_final_df <- b20_df%>%
 ```{r}
 ggplot(b20_final_df, aes(x = protection_status, y = b20_biomass))+
   geom_boxplot()+
+  theme.figure()
+
+ggplot(b20_abundance_df, aes(x = total_fish, y = b20_biomass))+
+  geom_point()+
   theme.figure()
 ```
 
@@ -3622,6 +3637,14 @@ ggplot(b20_final_df, aes(x = protection_status, y = b20_biomass))+
 
 ```{r}
 hist(b20_final_df$b20_biomass)
+
+mean_proc_b20 <- mean(b20_final_df$b20_biomass[b20_final_df$protection_status == "protected"])
+sd_proc_b20 <- sd(b20_final_df$b20_biomass[b20_final_df$protection_status == "protected"])
+se_proc_b20 <- sd_proc_b20/sqrt(length(b20_final_df$b20_biomass[b20_final_df$protection_status == "protected"]))
+
+mean_unproc_b20 <- mean(b20_final_df$b20_biomass[b20_final_df$protection_status == "unprotected"])
+sd_unproc_b20 <- sd(b20_final_df$b20_biomass[b20_final_df$protection_status == "unprotected"])
+se_unproc_b20 <- sd_unproc_b20/sqrt(length(b20_final_df$b20_biomass[b20_final_df$protection_status == "unprotected"]))
 ```
 
 ##### B20 mod with site
@@ -3629,7 +3652,7 @@ hist(b20_final_df$b20_biomass)
 ```{r B20 glmm}
 b20_mod_site <- glmmTMB(b20_biomass ~ protection_status + (1|site_code),
                         data = b20_final_df,
-                        family = glmmTMB)
+                        family = glmmTMB::tweedie(link = "log"))
 
 b20_mod_site
 
@@ -3639,6 +3662,30 @@ plot(b20_mod_site_resids)
 summary(b20_mod_site)
 ```
 
+```{r}
+b20_df_coords <- st_as_sf(b20_final_df, coords = c("longitude", "latitude"), crs = 4326)
+b20_df_coords <- st_transform(b20_df_coords, 32610)
+
+b20_df_coords_extracted <- st_coordinates(b20_df_coords)
+b20_df_coords$easting <- b20_df_coords_extracted[,1]
+b20_df_coords$northing <- b20_df_coords_extracted[,2]
+b20_df_coords$easting_km <- b20_df_coords$easting / 1000
+b20_df_coords$northing_km <- b20_df_coords$northing / 1000
+
+#b20_final_df <- b20_final_df%>%
+ # left_join(b20_df_coords, by = c("site_code", "site_name", "protection_status",
+                 #                 "survey_date", "depth", "b20_biomass"))
+
+b20_mod_site_resids <- simulateResiduals(b20_mod_site)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- b20_final_df$site_code
+group_locations <- aggregate(b20_final_df[, c("easting_km", "northing_km")], list(site_group), mean)
+
+b20_mod_site_resids_2 <- recalculateResiduals(b20_mod_site_resids, group = site_group)
+testSpatialAutocorrelation(b20_mod_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation
 
 ## Urchin Modelling
 
@@ -4439,6 +4486,40 @@ emmeans::emmeans(fish_sp_rich_glmm_site, ~protection_status, type = "response")
         axis.ticks.x = element_blank()))
 ```
 
+## B20
+
+### Predicting means with CI
+
+```{r}
+b20_sum_stats <- ggpredict(b20_mod_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                b20_biomass = predicted) %>% 
+  as.data.frame()
+```
+
+
+### Making plot with predicted means
+
+```{r}
+(b20_mod_plot <- ggplot(b20_final_df, aes(x = protection_status, y = b20_biomass))+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = b20_sum_stats, aes(x = protection_status, y = b20_biomass),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = b20_sum_stats, aes(x = protection_status, y = b20_biomass,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "B20")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
 
 ## Urchin abundance
 
@@ -4465,7 +4546,7 @@ urchin_ab_sum_stats <- ggpredict(urch_mod_glmm_site,
   geom_errorbar(data = urchin_ab_sum_stats, aes(x = protection_status, y = urchin_abundance,
                                                 ymin = conf.low, ymax = conf.high),
                 colour = "black", width = 0.2, linewidth = 1.2)+
-  labs(x = "Protection Status", y = "Sea urchin counts")+
+  labs(x = "Protection Status", y = "Sea urchin\ncounts")+
  #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
   theme.figure()+
   theme(legend.position = "none",
@@ -4501,7 +4582,23 @@ total_decapod_sum_stats <- ggpredict(dec_mod_glmm_site,
   labs(x = "Protection Status", y = "Decapod counts")+
  #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
   theme.figure()+
-  theme(legend.position = "none"))
+theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        #axis.ticks.x = element_blank()
+       ))
+```
+
+
+```{r Looking at Pandalid shrimp trends}
+panda_shrimp_df <- overall_rls_data_final%>%
+  select(site_code, site_name, protection_status, Pandalus_danae, Pandalus_gurneyi, Pandalus)%>%
+  mutate(total_panda = Pandalus_danae + Pandalus_gurneyi + Pandalus)
+
+
+ggplot(panda_shrimp_df, aes(x = protection_status, total_panda))+
+  geom_boxplot()+
+  theme.figure()
 ```
 
 
@@ -4534,7 +4631,8 @@ snail_ab_sum_stats <- ggpredict(snail_mod_glmm_site_no_outliers,
   theme(legend.position = "none",
         axis.text.x = element_blank(),
         axis.title.x = element_blank(),
-        axis.ticks.x = element_blank()))
+        #axis.ticks.x = element_blank()
+       ))
 ```
 
 
@@ -4570,12 +4668,19 @@ pycno_sum_stats <- ggpredict(pycno_mod_glmm_site,
 ## Combining the five into a multipanel plot
 
 ```{r}
-(ecological_test_plot <- (fish_sp_rich_mod_plot + fish_ab_mod_plot)/(urch_mod_plot + snail_mod_plot)/(decapod_mod_plot + pycno_mod_plot))
+(ecological_test_plot <- (fish_sp_rich_mod_plot + 
+                            fish_ab_mod_plot + 
+                            b20_mod_plot +
+                            urch_mod_plot + 
+                              snail_mod_plot + 
+                                decapod_mod_plot +
+                            pycno_mod_plot) +
+   plot_layout(ncol = 3))
 ```
 
 ## Saving as a pdf for export
 
 ```{r Saving the rec boat counts boxplot figure}
 ggsave("ecological_test_plot.pdf", plot = ecological_test_plot,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 200, units = "mm")
+       path = here("./04_plots/manuscript_figures"), width = 160, height = 150, units = "mm")
 ```
