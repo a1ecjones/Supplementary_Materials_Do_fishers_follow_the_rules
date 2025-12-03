@@ -1,0 +1,344 @@
+---
+title: Do fishers follow the rules? Evaluating recreational fishing compliance of
+  protected areas and downstream ecological responses
+author: "Alec Jones"
+date: "2025-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(sdmTMB)
+library(sf)
+library(ggspatial)
+library(cowplot)
+library(waver)
+library(lubridate)
+library(eks)
+library(patchwork)
+library(spatstat.geom)
+library(sparr)
+library(stars)
+library(raster)
+library(conflicted)
+library(metR)
+library(glmmTMB)
+library(DHARMa)
+library(car)
+library(ggeffects)
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("recode", "dplyr")
+```
+
+
+This document contains the code necessary to run the analyses performed in "Do fishers follow the rules? Evaluating recreational fishing compliance of protected areas and downstream ecological responses."
+
+# Loading in the data
+
+For this analysis I used four years of data from the RLS surveys in Barkley Sound, BC, Canada. I downloaded the RLS data from the website and combined the three files together (mobile fish, cryptobenthic fish, macroinverts). I did some preliminary cleaning of the files in Excel just to remove excess metadata rows included in the spreadsheet above the actual rows with data.
+
+```{r Downloading the macroinvert data, echo=FALSE}
+#Reading in the macroinvert data from the csv downloaded from the RLS website
+macroinvert_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_mobile_macroinvertebrate_abundance.csv"))
+```
+
+```{r Loading in the cryptobenthic fish data, echo=FALSE}
+cryptobenthic_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_cryptobenthic_fish_abundance.csv"))
+```
+
+```{r Loading in the mobile fish data, echo=FALSE}
+mobile_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_reef_fish_abundance_and_biomass.csv"))
+```
+
+
+# Cleaning up the data for use
+
+## Combining the three dfs into one overall and cleaning up for use
+
+```{r Combining the three RLS DFs}
+#Combines the data frames by adding them one above the other so the columns
+#stay the same
+overall_rls_data_raw <- rbind(cryptobenthic_fish_data_raw, macroinvert_data_raw,
+                              mobile_fish_data_raw)
+
+#Changing reporting name to a factor. Reporting name is the highest taxonomic
+#resolution recorded for each observation and is how observations are used in
+#the analyses
+overall_rls_data_raw$reporting_name <- as.factor(overall_rls_data_raw$reporting_name)
+
+#Making a list of the species observed in the RLS Data
+species_list <- levels(overall_rls_data_raw$reporting_name)
+```
+
+
+```{r Correcting the lat and long to be correct}
+#The Lat and Longs recorded in the RLS data published online are rounded off, 
+#so I replaced these rounded values with the exact Lat and Longs from the data
+#sheets filled out by the people who conducted the surveys
+
+overall_rls_data_raw_lat_long <- overall_rls_data_raw%>%
+ mutate(latitude = if_else(site_code == "BMSC1", 48.82894897, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC1", -125.1975708, longitude))%>%
+  
+   mutate(latitude = if_else(site_code == "BMSC2", 48.85039902, latitude))%>%
+   mutate(longitude = if_else(site_code == "BMSC2", -125.1987686, longitude))%>%
+  
+ mutate(latitude = if_else(site_code == "BMSC3", 48.85558319, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC3", -125.1837997, longitude))%>%
+  
+   mutate(latitude = if_else(site_code == "BMSC4", 48.81511688, latitude))%>%
+   mutate(longitude = if_else(site_code == "BMSC4", -125.1753311, longitude))%>%
+  
+ mutate(latitude = if_else(site_code == "BMSC5", 48.82733154, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC5", -125.1966019, longitude))%>%
+  
+   mutate(latitude = if_else(site_code == "BMSC6", 48.95023346, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC6", -125.1555481, longitude))%>%
+  
+  mutate(latitude = if_else(site_code == "BMSC7", 48.954644, latitude))%>%
+  mutate(longitude = if_else(site_code == "BMSC7", -125.153993, longitude))%>%
+  
+    mutate(latitude = if_else(site_code == "BMSC8", 48.95508194, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC8", -125.1533737, longitude))%>%
+
+    mutate(latitude = if_else(site_code == "BMSC9", 48.83478928, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC9", -125.1470261, longitude))%>%
+  
+ mutate(latitude = if_else(site_code == "BMSC10", 48.87051773, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC10", -125.160347, longitude))%>%
+  
+ mutate(latitude = if_else(site_code == "BMSC11", 48.85746765, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC11", -125.1582336, longitude))%>%
+  
+  mutate(latitude = if_else(site_code == "BMSC12", 48.858284, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC12", -125.1609192, longitude))%>%
+  
+mutate(latitude = if_else(site_code == "BMSC13", 48.8650322, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC13", -125.3137207, longitude))%>%
+  
+mutate(latitude = if_else(site_code == "BMSC14", 48.87908173, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC14", -125.2974014, longitude))%>%
+  
+ mutate(latitude = if_else(site_code == "BMSC15", 48.88028336, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC15", -125.3128815, longitude))%>% 
+  
+ mutate(latitude = if_else(site_code == "BMSC16", 48.89070129, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC16", -125.300499, longitude))%>% 
+  
+ mutate(latitude = if_else(site_code == "BMSC17", 48.86548233, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC17", -125.3614807, longitude))%>% 
+  
+mutate(latitude = if_else(site_code == "BMSC18", 48.91161728, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC18", -125.2670364, longitude))%>% 
+  
+ mutate(latitude = if_else(site_code == "BMSC19", 48.82860184, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC19", -125.2212982, longitude))%>%  
+  
+ mutate(latitude = if_else(site_code == "BMSC20", 48.83566666, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC20", -125.214798, longitude))%>%  
+  
+mutate(latitude = if_else(site_code == "BMSC21", 48.85205078, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC21", -125.1235657, longitude))%>%    
+  
+ mutate(latitude = if_else(site_code == "BMSC22", 48.85426712, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC22", -125.1170349, longitude))%>%    
+  
+  mutate(latitude = if_else(site_code == "BMSC23", 48.837589, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC23", -125.144145, longitude))%>%     
+  
+    mutate(latitude = if_else(site_code == "BMSC24", 48.916073, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC24", -125.131174, longitude))%>%
+  
+     mutate(latitude = if_else(site_code == "BMSC24", 48.916073, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC24", -125.131174, longitude))%>%
+  
+      mutate(latitude = if_else(site_code == "BMSC25", 48.838595, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC25", -125.135015, longitude))%>% 
+  
+        mutate(latitude = if_else(site_code == "BMSC26", 48.9071, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC26", -125.037017, longitude))%>% 
+  
+     mutate(latitude = if_else(site_code == "BMSC27", 48.901183, latitude))%>%
+ mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))
+```
+
+
+```{r Converting species with duplicate names to the accepted one}
+#Some species were inputted under two different names, with one being out of 
+#date. This chunk corrects that to have the species only listed under the 
+#current name
+overall_rls_data_raw_lat_long_updated_names <- overall_rls_data_raw_lat_long%>%
+  mutate(reporting_name = if_else(reporting_name == "Phyllolithodes papillosus",
+                                  "Echidnocerus cibarius", reporting_name),
+         reporting_name = if_else(reporting_name == "Mimulus foliatus",
+                                  "Pugettia foliata", reporting_name))
+```
+
+
+```{r Converting to form with a column for each species}
+#In order to perform analyses on the numbers of each species on each individual,
+#transect I needed to convert the data frame to have a row for each transect and 
+#a column for each species with the overall counts on the corresponding transect
+
+overall_rls_data_raw_wide <- overall_rls_data_raw_lat_long_updated_names%>%
+  #Picks the columns to get rid of
+  select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude"))%>%
+  #Groups by each transect and unique species
+  group_by(site_code, site_name, latitude, longitude, survey_date, depth, reporting_name)%>%
+  #Adds up the total of each species on each transect 
+  summarise(site_count = sum(total))
+
+#Putting reporting name back to character to allow for replacing some names 
+#below
+overall_rls_data_raw_wide$reporting_name <- as.character(overall_rls_data_raw_wide$reporting_name)
+
+
+#Two observations had NA for reporting name at this point so this chunk just
+#replaces NA with the highest resolution taxonomic name for each
+
+#The Embiotocidae one
+overall_rls_data_raw_wide$reporting_name[is.na(overall_rls_data_raw_wide$reporting_name) &
+                                           overall_rls_data_raw_wide$site_code == "BMSC11"] <- "Embiotocidae spp."
+#The percidae one
+overall_rls_data_raw_wide$reporting_name[is.na(overall_rls_data_raw_wide$reporting_name) &
+                                           overall_rls_data_raw_wide$site_code == "BMSC6"] <- "Percidae spp."
+
+#Putting reporting name back to factor
+overall_rls_data_raw_wide$reporting_name <- as.factor(overall_rls_data_raw_wide$reporting_name)
+
+#This actually pivots the data frame to be in wide format
+overall_rls_data_raw_wide <- overall_rls_data_raw_wide%>%
+  #Replacing the spaces in the reporting names to underscores
+  mutate(reporting_name = str_replace_all(reporting_name, " ", "_"))%>%
+  pivot_wider(
+    names_from = reporting_name,
+    values_from = site_count,
+    values_fill = 0
+  )
+```
+
+
+Three sites (BMSC31, 32, and 33) were only sampled in 2023, and were done by another group, so I decided to omit these sites from the analysis. In the chunk below I also add the protection status for each site.
+```{r Cutting the other sites and adding the information to do some modelling}
+#Cutting the other sites
+
+overall_rls_data_clean <- overall_rls_data_raw_wide%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#This code adds the protection status of each site (protected from fishing or 
+  #not). 
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+#Making some more of the variables into factors
+overall_rls_data_clean$site_code <- as.factor(overall_rls_data_clean$site_code)
+overall_rls_data_clean$site_name <- as.factor(overall_rls_data_clean$site_name)
+overall_rls_data_clean$protection_status <- as.factor(overall_rls_data_clean$protection_status)
+```
+
+## Making some specific columns for modelling
+
+This chunk was used to make some counts of different overall groups, such as 
+decapods or total urchins.
+```{r Making specific groups for modelling}
+overall_rls_data_groups <- overall_rls_data_clean%>%
+  mutate(total_urchins = Mesocentrotus_franciscanus + Strongylocentrotus_purpuratus + Strongylocentrotus_droebachiensis,
+         total_fish = Actinopterygii_spp. + Anarrhichthys_ocellatus + Anoplarchus +
+           Apodichthys_flavidus + Artedius_fenestralis + Artedius_harringtoni + Artedius_lateralis+
+           Ascelichthys_rhodorus + Asemichthys_taylori + Aulorhynchus_flavidus + Brachyistius_frenatus +
+           Chirolophis_nugator + Citharichthys_stigmaeus + Clinocottus_acuticeps + Cottid_spp. +
+           Cymatogaster_aggregata + Embiotoca_lateralis + Enophrys_bison + Gibbonsia_metzi + Gobiesox_maeandricus +
+           Hemilepidotus + Hemilepidotus_hemilepidotus + Hemilepidotus_spinosus + Hexagrammos +
+           Hexagrammos_decagrammus + Hexagrammos_stelleri + Jordania_zonope + Liparis_florae + Myoxocephalus_aenaeus +
+           Myoxocephalus_polyacanthocephalus + Oligocottus_maculosus + Ophiodon_elongatus + Orthonopias_triacis+
+           Oxylebius_pictus + Phoca_vitulina + Pholis + Pholis_clemensi + Pholis_gunnellus + Pholis_laeta +
+           Pholis_ornata + Pleuronichthys_coenosus + Porichthys_notatus + Rhacochilus_vacca +
+           Rhamphocottus_richardsonii + Rhinogobiops_nicholsii + Rhinogobiops_nicholsii +
+           Scorpaenichthys_marmoratus + Sebastes_caurinus + Sebastes_flavidus + Sebastes_maliger + Sebastes_melanops +
+           Sebastes_nebulosus + Sebastes_pinniger + Sebastes_spp. + Synchirus_gilli + Zalophus_californianus + Percidae_spp.+
+           Embiotocidae_spp.,
+         total_rockfish = Sebastes_spp. + Sebastes_pinniger + Sebastes_caurinus + Sebastes_maliger + Sebastes_melanops +
+           Sebastes_nebulosus + Sebastes_flavidus,
+         total_mesograzers = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
+           Lottia + Lottia_scutum + Megathura_crenulata + Mesocentrotus_franciscanus +
+           Pagurus_hemphilli + Pomaulax_gibberosus + Pugettia_foliata + Pugettia_gracilis + Pugettia_producta +
+           Pugettia_richii + Strongylocentrotus_droebachiensis + Strongylocentrotus_purpuratus + Tegula_funebralis,
+         mesograzers_w_o_urchins = Acmaea_mitra + Amphissa_columbiana + Calliostoma_ligatum + Diodora_aspera + Haliotis_kamtschatkana +
+           Lottia + Lottia_scutum + Megathura_crenulata +
+           Pagurus_hemphilli + Pomaulax_gibberosus + Pugettia_foliata + Pugettia_gracilis + Pugettia_producta +
+           Pugettia_richii + Tegula_funebralis,
+         total_nudibranchs = Acanthodoris_hudsoni + Acanthodoris_nanaimoensis + Aglaja_ocelligera +
+           Aldisa + Antiopella_fusca + Armina_californica + Boreoberthella_chacei + Cadlina + Cadlina_luteomarginata +
+           Cadlina_modesta + Cadlina_sylviaearleae + Coryphella_trilineata + Coryphella_trophina + Coryphella_verrucosa +
+           Dendronotus_albus + Dendronotus_iris + Diaulula_odonoghuei + Diaulula_sandiegensis +
+           Dirona_albolineata + Dirona_pellucida + Doris_montereyensis + Doris_odhneri + 
+           Geitodoris_heathi + Hermissenda_crassicornis + Limacia_cockerelli + Montereina_nobilis +
+           Onchidoris_bilamellata + Polycera_tricolor + Rostanga_pulchra + Triopha_catalinae + Triopha_modesta +
+           Triopha_spp. + Tritonia_festiva,
+         total_decapods = Cancer_productus + Decapoda_spp.+ Glebocarcinus_oregonensis + Scyra_acutifrons +
+           Pachycheles_pubescens + Pugettia_producta + Pugettia_foliata + Pagurus_hemphilli + Romaleon_antennarium +
+           Oregonia_gracilis + Pugettia_gracilis + Echidnocerus_cibarius + Pandalus_gurneyi + Pagurus_beringanus +
+           Pandalus_danae + Cryptolithodes_typicus + Pagurus_caurinus + Lopholithodes_mandtii + Discorsopagurus_schmitti +
+           Chorilia_longipes + Pugettia_richii + Rhinolithodes_wosnessenskii + Heptacarpus_stylus + Lophopanopeus_bellus + 
+           Pachycheles_rudis + Hapalogaster_mertensii + Scyra + Paguristes_ulreyi + Elassochirus_tenuimanus + Pachycheles +
+           Pandalus + Petrolisthes_eriomerus)
+```
+
+This adds a column for year for use in any temporal analyses.
+```{r Adding a column for year}
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_groups$year <- format(overall_rls_data_groups$survey_date, "%Y")
+
+#Changing back to a number
+overall_rls_data_groups$year <- as.numeric(overall_rls_data_groups$year)
+```
+
+
+In case I wanted to include a grouping factor of region, this chunk assigns the corresponding region to each site.
+```{r Adding a column for the regions for each site}
+  overall_rls_data_groups <- overall_rls_data_groups%>%
+  mutate(region = case_when(
+    site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC19", "BMSC2",
+                     "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC25", "BMSC3",
+                     "BMSC4", "BMSC5", "BMSC9") ~ "Deer group/Bamfield",
+    site_code %in% c("BMSC13", "BMSC14", "BMSC15", "BMSC16", "BMSC17", 
+                     "BMSC18") ~ "Broken Group",
+    site_code %in% c("BMSC24", "BMSC6", "BMSC7", "BMSC8") ~ "Deep Imperial Eagle Channel",
+    site_code %in% c("BMSC26", "BMSC27") ~ "Sarita"
+  ))
+```
+
+
+To see how site kelp characteristics influence animal counts, this chunk adds the site kelp info for each site as evidenced in RLS photoquadrats.
+```{r Adding columns for site kelp characteristics}
+overall_rls_data_groups <- overall_rls_data_groups%>%
+  #This adds a column with the specific site kelp characteristics
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))%>%
+  #This adds a column for simple kelp presence or absence
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+```
+
+

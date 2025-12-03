@@ -172,6 +172,7 @@ mutate(latitude = if_else(site_code == "BMSC21", 48.85205078, latitude))%>%
  mutate(longitude = if_else(site_code == "BMSC27", -125.060433, longitude))
 ```
 
+
 ```{r Converting species with duplicate names to the accepted one}
 overall_rls_data_raw_lat_long_updated_names <- overall_rls_data_raw_lat_long%>%
   mutate(reporting_name = if_else(reporting_name == "Phyllolithodes papillosus",
@@ -243,7 +244,6 @@ overall_rls_data_clean$protection_status <- as.factor(overall_rls_data_clean$pro
 
 
 ## Making some specific columns for modelling
-
 
 ```{r Making specific groups for modelling}
 overall_rls_data_groups <- overall_rls_data_clean%>%
@@ -1193,7 +1193,7 @@ This was the rough version of the plot and then I saved it as a pdf and used ink
 
 ```{r Saving the site map}
 ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/manuscript_figures_rough"),
        width = 165, height = 130, units = "mm")
 ```
 
@@ -1246,7 +1246,7 @@ size_breaks_1km <- c(0, 30, 60, 100)
 
 ```{r Saving the rec boat impacts figure 1km map}
 ggsave("rec_boat_impacts_1km_mean.pdf", plot = rec_boat_impacts_1km_mean,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/extra_figures"),
        width = 165, height = 130, units = "mm")
 ```
 
@@ -1290,7 +1290,7 @@ size_breaks_1.5km <- c(0, 30, 60, 100)
 
 ```{r Saving the rec boat impacts figure 1.5km map}
 ggsave("rec_boat_impacts_1.5km_mean.pdf", plot = rec_boat_impacts_1.5km_mean,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/extra_figures"),
        width = 165, height = 130, units = "mm")
 ```
 
@@ -1332,7 +1332,7 @@ This is a lot less clear of a way to show the data so I will likely stick with t
 
 ```{r Saving the rec boat impacts figure 1.5km map}
 ggsave("rec_boat_impacts_1.5km_mean_colour.pdf", plot = rec_boat_impacts_1.5km_mean_colour,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/extra_figures"),
        width = 165, height = 130, units = "mm")
 ```
 
@@ -1371,7 +1371,7 @@ size_breaks_2km <- c(0, 30, 60, 100)
 
 ```{r Saving the rec boat impacts figure 2km map}
 ggsave("rec_boat_impacts_2km_mean.pdf", plot = rec_boat_impacts_2km_mean,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/extra_figures"),
        width = 165, height = 130, units = "mm")
 ```
 
@@ -1488,7 +1488,7 @@ This was imported to inkscape where labels for the radii used were added (1, 1.5
 
 ```{r Saving the rec boat counts boxplot figure}
 ggsave("rec_boats_boxplot_overall.pdf", plot = rec_boats_overall_boxplots,
-       path = here("./04_plots/manuscript_figures"), width = 180, height = 80, units = "mm")
+       path = here("./04_plots/manuscript_figures_rough"), width = 180, height = 80, units = "mm")
 ```
 
 # Appendix stuff
@@ -1529,7 +1529,7 @@ A legend was added and the flight path line styling was edited using inkscape.
 
 ```{r Saving the rec boats plot with dfo flight track}
 ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
 ```
 
 
@@ -2107,7 +2107,7 @@ size_breaks_1km <- c(0, 250, 500, 1000, 1500)
 
 ```{r}
 ggsave("mesograzer_abundance_with_urchins.pdf", plot = mesograzer_abundance,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/extra_figures"),
        width = 300, height = 300, units = "mm")
 ```
 
@@ -2154,7 +2154,7 @@ size_breaks_1km <- c(0, 250, 500, 1000, 1500)
 
 ```{r}
 ggsave("mesograzer_abundance_no_urchins.pdf", plot = mesograzer_abundance_no_urchins,
-       path = here("./04_plots/manuscript_figures"),
+       path = here("./04_plots/extra_figures"),
        width = 300, height = 300, units = "mm")
 ```
 
@@ -2290,7 +2290,7 @@ VI_base_layer_hi_res_sf_subset_projected <- st_transform(VI_base_layer_hi_res_sf
 
 ```{r}
 ggsave("overall_rec_boat_KDE.pdf", plot = overall_rec_boat_kde_map,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 ```
 
 
@@ -2339,7 +2339,7 @@ ggsave("overall_rec_boat_KDE.pdf", plot = overall_rec_boat_kde_map,
 
 ```{r}
 ggsave("three_year_rec_boat_KDE_maps.pdf", plot = three_years_rec_boats_kde_map,
-       path = here("./04_plots/manuscript_figures"), width = 400, height = 200, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 400, height = 200, units = "mm")
 ```
 
 
@@ -2512,10 +2512,10 @@ The plot is showing the density distribution of boats. Intensity is the average 
 
 ```{r}
 ggsave("overall_rec_boat_KDE_sparr_map.pdf", plot = overall_rec_boat_kde_sparr_map,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
 
 ggsave("overall_rec_boat_KDE_sparr_map.png", plot = overall_rec_boat_kde_sparr_map,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
 ```
 
 
@@ -2562,10 +2562,10 @@ threshold_95_21 <- quantile(rec_boat_kde_overall_df_21$layer, 0.95, na.rm = TRUE
 
 ```{r}
 ggsave("rec_boat_KDE_sparr_21_map.pdf", plot = rec_boat_kde_sparr_map_21,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 
 ggsave("rec_boat_KDE_sparr_21_map.png", plot = rec_boat_kde_sparr_map_21,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 ```
 
 
@@ -2611,10 +2611,10 @@ threshold_95_22 <- quantile(rec_boat_kde_overall_df_22$layer, 0.95, na.rm = TRUE
 
 ```{r}
 ggsave("rec_boat_KDE_sparr_22_map.pdf", plot = rec_boat_kde_sparr_map_22,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 
 ggsave("rec_boat_KDE_sparr_22_map.png", plot = rec_boat_kde_sparr_map_22,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 ```
 
 ```{r Plotting the 2023 KDE}
@@ -2659,10 +2659,10 @@ threshold_95_23 <- quantile(rec_boat_kde_overall_df_23$layer, 0.95, na.rm = TRUE
 
 ```{r}
 ggsave("rec_boat_KDE_sparr_23_map.pdf", plot = rec_boat_kde_sparr_map_23,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 
 ggsave("rec_boat_KDE_sparr_23_map.png", plot = rec_boat_kde_sparr_map_23,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 120, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
 ```
 
 
@@ -3562,7 +3562,7 @@ To visualize this data, we will have a list of species with a bar to the right. 
 
 ```{r}
 ggsave("sp_specificity_plot.pdf", plot = sp_specificity_plot,
-       path = here("./04_plots/manuscript_figures"), width = 210, height = 800, units = "mm")
+       path = here("./04_plots/extra_figures"), width = 210, height = 800, units = "mm")
 ```
 
 
@@ -4682,5 +4682,5 @@ pycno_sum_stats <- ggpredict(pycno_mod_glmm_site,
 
 ```{r Saving the rec boat counts boxplot figure}
 ggsave("ecological_test_plot.pdf", plot = ecological_test_plot,
-       path = here("./04_plots/manuscript_figures"), width = 160, height = 150, units = "mm")
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 150, units = "mm")
 ```
