@@ -342,3 +342,897 @@ overall_rls_data_groups <- overall_rls_data_groups%>%
 ```
 
 
+## Calculating and adding the openness of each site to the data frame
+I had considered adding openness into the analysis so the code below is a workflow for calculating the fetch at each site and adding it to the dataframe. In the end I did not add in the fetch to the current analysis.
+```{r Making dfs of the unique sites and then just the lat and long, echo=FALSE, include=FALSE}
+#Making a df with just the unique site info
+site_data <- overall_rls_data_groups%>%
+  distinct(site_code, site_name, latitude, longitude)
+
+#Making a df with just the unique lat and longs
+site_coords <- site_data%>%
+  ungroup()%>%
+  select(latitude, longitude)%>%
+  distinct()
+
+#This converts the site coordinates into a sf object and specifies the 
+#coordinate reference system to be the same as the shape file
+site_sp <- st_as_sf(site_coords, coords = c("longitude", "latitude"), crs = 4326)
+```
+
+
+```{r Loading in the shapefiles to do the fetch calculations, include=FALSE}
+#This is a high resolution shape file from Hakai. This code loads in the shape
+#file and saves it as the proper shape file object
+VI_base_layer_hi_res <- read_sf(dsn = here("./01_raw_data/hakai_zip"),
+                                stringsAsFactors = F)
+
+VI_base_layer_hi_res_sf <- st_as_sf(VI_base_layer_hi_res)
+
+#specifying the projection to use for the sf
+st_crs(VI_base_layer_hi_res_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+
+
+#This subsets the shape file to only be of Barkley Sound to make plotting more
+#efficient
+
+#This makes coordinate limits to subset the shapefile
+shp_xmin <- -125.4
+shp_xmax <- -124.95
+shp_ymin <- 48.7
+shp_ymax <- 49.0
+
+#This makes a bounding of the coordinates that I just made
+bbox <- st_bbox(c(xmin = shp_xmin, ymin = shp_ymin, xmax = shp_xmax, ymax = shp_ymax))
+
+#This converts the boundary box to an SFC object
+bbox_sf <- st_as_sfc(bbox)
+
+#This crops the shape file to the area of the bounding box
+VI_base_layer_hi_res_sf_subset <- st_crop(VI_base_layer_hi_res_sf, bbox_sf)
+#plot(VI_base_layer_hi_res_sf_subset)
+```
+
+```{r Calculating the fetch for the sites, eval=FALSE}
+#Makes an object of all the bearings to calculate fetch along
+#bearings_openness <- seq(7.5, 360, by = 7.5)
+
+#Specifies to use the GEOS engine
+sf::sf_use_s2(FALSE)
+
+#This calculates the fetch for each site along each of the bearings calculated
+#above. Max possible fetch is 650,000 meters. It is using the shape file from 
+#above to know where land is. This will likely take a very long time to run
+#so do not worry.
+#I have ## this code out because it takes way too long to run. There is code in
+#the chunk below that will load in the data from a .csv that has already been
+#made by running the fetch_len_multi function
+
+#fetch_df_openness <- fetch_len_multi(site_sp,
+                                #         bearings = bearings_openness, 
+                                #          dmax = 650000, 
+                                 #         shoreline = VI_base_layer_hi_res_sf, 
+                                  #        projected = FALSE)
+
+#Converting the raw fetch data into a df
+#fetch_df_openness <- as.data.frame(fetch_df_openness)
+
+#Saving the fetch data to a .csv so that the fetch function does not need to be
+#run
+#write_csv(fetch_df_openness, here("./01_raw_data/fetch_df_openness.csv"))
+```
+
+```{r Loading in the pre calculated fetch data, echo=FALSE}
+fetch_df_openness <- read_csv(here("./01_raw_data/fetch_df_openness.csv"))
+```
+
+```{r Turning the raw openness fetch data into a dataframe with column labels}
+#Making an object with all of the site code names listed to be able to make a
+#column of site codes in the fetch df below
+site_code <- unique(overall_rls_data_groups$site_code)
+
+#Adding a column with the site codes
+fetch_df_openness$site_code <- site_code
+#Adding a column with the site lat
+fetch_df_openness$latitude <- site_coords$latitude
+#Adding a column with the site long
+fetch_df_openness$longitude <- site_coords$longitude
+
+#Reorganizing the order of the columns so that site code, lat, and long are 
+#first
+fetch_df_openness_final <- fetch_df_openness[, c(49, 50, 51, seq(1, 48, by = 1))]
+
+#Converting into long format for further analysis and adding to the RLS data
+fetch_df_openness_long <- fetch_df_openness_final%>%
+  #Makes column with bearing degree and column with corresponding fetch
+  pivot_longer(cols = `7.5`: `360`, 
+               names_to = "degree", 
+               values_to = "fetch", 
+               #Removes the prefix "degree" from the values going into the 
+               #degree column
+               names_prefix = "degree")
+```
+
+```{r Summing the fetch vectors for each site then dividing by the largest openness value}
+#Calculates the openness of each site
+openness <- fetch_df_openness_long%>%
+  #grouping by each site
+  group_by(site_code, latitude, longitude)%>%
+  #adding up all of the fetch vectors for each site
+  summarise(openness = sum(fetch))
+  
+#identifying the largest openness score within the dataset
+max_openness <- max(openness$openness)
+
+#Making a column of normalized openness by dividing by the max observed openness
+openness <- openness%>%
+mutate(norm_openness = openness / max_openness)
+
+#Merging the modelling df with the openness df by each site
+overall_rls_data_groups_with_openness <- merge(overall_rls_data_groups, openness, by = c("site_code", "latitude", "longitude"))
+```
+
+
+## Making a df with only fish species
+For the fish species richness analyses below I needed to make a dataframe with the number of unique fish species observed on each transect which is what the code below does.
+```{r Fish species richness df}
+#Pulls only the unique species observations on each transect
+fish_sp_rich_df_intermediate <- overall_rls_data_expanded%>%
+  distinct(site_code, site_name, survey_date, depth, reporting_name, protection_status, latitude, longitude)
+
+fish_sp_rich_df_intermediate$reporting_name <- as.factor(fish_sp_rich_df_intermediate$reporting_name)
+
+#This counts the number of unique species on each transects and records that in
+#a new column
+fish_sp_rich_df <- fish_sp_rich_df_intermediate%>%
+  group_by(site_code, site_name, survey_date, depth, protection_status, latitude, longitude)%>%
+  summarise(fish_sp_rich = length(unique(reporting_name)))
+```
+
+
+
+## Adding recreational fishing boat location data to the data frame
+
+To study the recreational fisher compliance of protected areas in Barkley Sound
+we used recreational fishing boat location data from DFO overflight surveys. 
+The code below adds these data to the dataframe and counts the average number
+of boats fishing around RLS sites within specified radii. We omitted aerial 
+surveys where parts of Barkley Sound were obscured by fog.
+
+### Loading in the DFO survey data
+
+#### Loading in the 2023 data
+
+```{r Loading in the  2023 DFO data}
+DFO_data_raw_2023 <- read_csv(here("./01_raw_data/DFO_data/Overflight2023_ObservationPoints_20241024.csv"))
+
+#Makes list of the variables that need to be converted to factors below
+dfo_factors <- c("Day Type", "Creel Subarea")
+
+#takes the raw data and cleans it up
+rec_boats_fishing2023 <- DFO_data_raw_2023%>%
+  #converts the variables specified above to factors
+  mutate_at(dfo_factors, factor)%>%
+  #renaming the columns to make them easier to code with
+  rename(rec_boats_fishing = `1. Rec Boat Fishing`,
+         rec_boats_running = `2. Rec Boats Running`,
+         comm_vessel_fishing = `3. Commercial Vessel Fishing`,
+         comm_vessel_not_fishing = `4. Commercial Vessel Not Fishing`,
+         small_comm_vessel = `5. Small Commercial Vessel`,
+         large_comm_vessel = `6. Large Commercial Vessel`,
+         whale_watching = `7.  Whale Watching Boat`,
+         orcas = `8. Orcas`,
+         whales = `9. Whales`,
+         sea_state = `10. Sea State`)%>%
+  #Replacing the cells that have "Null" with 0 and converting the count columns
+  #to numeric
+  mutate(across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), ~ ifelse(. == "<Null>", 0, .)),
+         across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), as.numeric))%>%
+  ##This code will remove the dates of the flights that had fog
+  filter(!Date %in% c("2023-06-23", "2023-07-16", "2023-07-31", "2023-08-06", "2023-08-28",
+                      "2023-08-29", "2023-09-09", "2023-09-15"))%>%
+  #Selecting only the rows where recreational boats were fishing
+  filter(rec_boats_fishing != 0)%>%
+  #selecting all of the columns that are needed for further analysis
+    select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
+           `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+
+#Subsetting the dataframe to have points from only the region of interest
+rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
+                                  Longitude >= -125.4114807 & Longitude <= -124.987017)
+```
+
+
+#### Loading in the 2022 data
+
+```{r Loading in the 2022 DFO data}
+DFO_data_raw_2022 <- read_csv(here("./01_raw_data/DFO_data/Overflight2022_ObservationPoints_20240124_COUNTS.csv"))
+
+#dfo_factors <- c("Day Type", "Creel Subarea")
+
+rec_boats_fishing2022 <- DFO_data_raw_2022%>%
+  mutate_at(dfo_factors, factor)%>%
+  rename(rec_boats_fishing = `1. Rec Boat Fishing`,
+         rec_boats_running = `2. Rec Boats Running`,
+         comm_vessel_fishing = `3. Commercial Vessel Fishing`,
+         comm_vessel_not_fishing = `4. Commercial Vessel Not Fishing`,
+         small_comm_vessel = `5. Small Commercial Vessel`,
+         large_comm_vessel = `6. Large Commercial Vessel`,
+         whale_watching = `7.  Whale Watching Boat`,
+         orcas = `8. Orcas`,
+         whales = `9. Whales`,
+         sea_state = `10. Sea State`)%>%
+  mutate(across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), ~ ifelse(. == "<Null>", 0, .)),
+         across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), as.numeric))%>%
+   ##This code will remove the dates of the flights that had fog
+  filter(!Date %in% c("2022-06-18", "2022-07-31", "2022-08-24", "2022-06-04"))%>%
+    filter(rec_boats_fishing != 0)%>%
+  #selecting all of the columns that are needed for further analysis
+    select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
+           `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+
+#Subsetting the dataframe to have points from only the region of interest
+rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
+                                  Longitude >= -125.4114807 & Longitude <= -124.987017)
+```
+
+
+#### Loading in the 2021 data
+
+```{r Loading in the 2021 DFO data}
+DFO_data_raw_2021 <- read_csv(here("./01_raw_data/DFO_data/Overflight2021_ObservationPoints_20240321_counts.csv"))
+
+#dfo_factors <- c("Day Type", "Creel Subarea")
+
+rec_boats_fishing2021 <- DFO_data_raw_2021%>%
+  mutate_at(dfo_factors, factor)%>%
+  rename(rec_boats_fishing = `1. Rec Boat Fishing`,
+         rec_boats_running = `2. Rec Boats Running`,
+         comm_vessel_fishing = `3. Commercial Vessel Fishing`,
+         comm_vessel_not_fishing = `4. Commercial Vessel Not Fishing`,
+         small_comm_vessel = `5. Small Commercial Vessel`,
+         large_comm_vessel = `6. Large Commercial Vessel`,
+         whale_watching = `7.  Whale Watching Boat`,
+         orcas = `8. Orcas`,
+         whales = `9. Whales`,
+         sea_state = `10. Sea State`)%>%
+  mutate(across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), ~ ifelse(. == "<Null>", 0, .)),
+         across(c("rec_boats_fishing", "rec_boats_running", "comm_vessel_fishing", 
+                  "comm_vessel_not_fishing", "small_comm_vessel", "large_comm_vessel",
+                  "whale_watching", "orcas", "whales"), as.numeric))%>%
+   ##This code will remove the dates of the flights that had fog
+  filter(!Date %in% c("2021-07-31", "2021-07-19", "2021-07-20", "2021-07-24"))%>%
+   filter(rec_boats_fishing != 0)%>%
+  select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
+           `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
+
+#Subsetting the dataframe to have points from only the region of interest
+rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
+                                  Longitude >= -125.4114807 & Longitude <= -124.987017)
+```
+
+
+#### Combining the three years of data into one data frame
+```{r Combining the three years of data by row}
+rec_boats_fishing_total <- rbind(rec_boats_fishing2021_subset, rec_boats_fishing2022_subset, rec_boats_fishing2023_subset)
+```
+
+### Adding the recreational fishing boat data to the data frame
+
+To add the recreational fishin boat data we first calculated the mean number of
+recreational fishing boats fishing within various radii of each RLS site. We did
+this by making circular polygons around each RLS site and then merging those 
+with the rec boat points and counting how many were in each circle each year, 
+and then averaging across the three years of data.
+
+#### Calculating the mean recreational boats fishing within each radius
+
+```{r Creating a circular radius around each site}
+#Taking the site locations from the clean data frame
+site_locations <- st_as_sf(overall_rls_data_groups, coords = c("longitude", "latitude"), crs = 4326)
+
+#removing unnecessary rows
+site_locations <- site_locations%>%
+  select(c(site_code, site_name, geometry))
+
+#Picking only the unique site locations as some sites have multiple transects
+#with the same coordinates
+site_locations_u <- site_locations%>%
+  distinct(site_code, geometry)
+
+#Changing the projection to handle meter distances better
+site_locations_u_proj_m <- st_transform(site_locations_u, crs = 3857)
+#Making circles with the different radii around each site
+site_locations_radius_1km <- st_buffer(x = site_locations_u_proj_m, dist = 1000)
+site_locations_radius_1.5km <- st_buffer(x = site_locations_u_proj_m, dist = 1500)
+site_locations_radius_2km <- st_buffer(x = site_locations_u_proj_m, dist = 2000)
+```
+
+```{r Finding the overlapping points for each site}
+#making a data frame with the coordinates of all the recreational fishing boats
+rec_boats_fishing_total_points <- st_as_sf(rec_boats_fishing_total, coords = c("Longitude", "Latitude"), crs = 4326)
+#Converting the CRS so it matches the other parts being used
+rec_boats_fishing_total_points <- st_transform(rec_boats_fishing_total_points, crs = 3857)
+
+
+#Finding the fishing boats that are within the given radius and making a new df
+#with this info
+rec_fishing_boat_total_radius_1km <- st_intersection(site_locations_radius_1km, rec_boats_fishing_total_points)
+
+rec_fishing_boat_total_radius_1.5km <- st_intersection(site_locations_radius_1.5km, rec_boats_fishing_total_points)
+
+rec_fishing_boat_total_radius_2km <- st_intersection(site_locations_radius_2km, rec_boats_fishing_total_points)
+```
+
+```{r Making dataframes with boat counts summed for each year at each site}
+#Here I took the data frames with the counts and points of boats within the
+#radii of the sites and I summed the number of boats counted around a site
+#within each year. For example, I added all of the boats around Eagle bay in
+#2021
+
+rec_fishing_boat_total_radius_1km_summed <- rec_fishing_boat_total_radius_1km%>%
+  #Grouping by each site in each year
+  group_by(site_code, Year)%>%
+  #adding up the number of boats around a site in each year
+  summarise(yearly_rec_boats_fishing = sum(rec_boats_fishing))
+
+rec_fishing_boat_total_radius_1.5km_summed <- rec_fishing_boat_total_radius_1.5km%>%
+  group_by(site_code, Year)%>%
+  summarise(yearly_rec_boats_fishing = sum(rec_boats_fishing))
+
+rec_fishing_boat_total_radius_2km_summed <- rec_fishing_boat_total_radius_2km%>%
+  group_by(site_code, Year)%>%
+  summarise(yearly_rec_boats_fishing = sum(rec_boats_fishing))
+```
+
+```{r Making a total dataframe for each so that years with no boats have a 0 counts}
+#For some sites that had boats counted in one particular year at a given radius
+#did not have counts in all years. This step made data frames with a list of all
+#of the sites that had at least some counts at the given radius in one of the 
+#years and then made a row for each of the three years for that site.
+
+#Makes a row for all three years for sites that had a least one boat counted
+#in one of the years
+all_sites_years_1km <- expand.grid(
+  site_code = unique(rec_fishing_boat_total_radius_1km$site_code),
+  Year = unique(rec_fishing_boat_total_radius_1km$Year))
+
+all_sites_years_1.5km <- expand.grid(
+  site_code = unique(rec_fishing_boat_total_radius_1.5km$site_code),
+  Year = unique(rec_fishing_boat_total_radius_1.5km$Year))
+
+all_sites_years_2km <- expand.grid(
+  site_code = unique(rec_fishing_boat_total_radius_2km$site_code),
+  Year = unique(rec_fishing_boat_total_radius_2km$Year))
+```
+
+```{r Merging the all years df with the rec boat count sums}
+#This step merged the summed boat counts at each site with the dataframe that
+# had all three years listed so that there was a row with 0 for the sites which
+#did not have any counts in a particular year. This was necessary for making the
+#average calculation accurate.
+
+rec_fishing_boat_total_radius_1km_complete <- all_sites_years_1km %>%
+  #Joins the rec fishing boat counts within radius to the df with all the years
+  #for each site by site and year
+  left_join(rec_fishing_boat_total_radius_1km_summed, by = c("site_code", "Year")) %>%
+  #replaces the rows that have NAs with 0
+  mutate(yearly_rec_boats_fishing = replace_na(yearly_rec_boats_fishing, 0))
+
+rec_fishing_boat_total_radius_1.5km_complete <- all_sites_years_1.5km %>%
+  left_join(rec_fishing_boat_total_radius_1.5km_summed, by = c("site_code", "Year")) %>%
+  mutate(yearly_rec_boats_fishing = replace_na(yearly_rec_boats_fishing, 0))
+
+rec_fishing_boat_total_radius_2km_complete <- all_sites_years_2km %>%
+  left_join(rec_fishing_boat_total_radius_2km_summed, by = c("site_code", "Year")) %>%
+  mutate(yearly_rec_boats_fishing = replace_na(yearly_rec_boats_fishing, 0))
+```
+
+```{r Making the final dataframe with the average boat counts per year for each site}
+#This was the final step to average the recreational boat counts at each site 
+#across the three years of data
+
+
+rec_fishing_boat_total_radius_1km_final <- rec_fishing_boat_total_radius_1km_complete%>%
+  #groups by each site
+  group_by(site_code)%>%
+  #makes a new column with the mean number of boats counted within each sites 
+  #radius
+  summarise(mean_rec_boat_counts_1km = mean(yearly_rec_boats_fishing))
+
+rec_fishing_boat_total_radius_1.5km_final <- rec_fishing_boat_total_radius_1.5km_complete%>%
+  group_by(site_code)%>%
+  summarise(mean_rec_boat_counts_1.5km = mean(yearly_rec_boats_fishing))
+
+rec_fishing_boat_total_radius_2km_final <- rec_fishing_boat_total_radius_2km_complete%>%
+  group_by(site_code)%>%
+  summarise(mean_rec_boat_counts_2km = mean(yearly_rec_boats_fishing))
+```
+
+```{r Adding the avg counts to the main dataset}
+#This step added each of the data frames with the average rec boat counts
+# to the modelling dataset. The resulting dataset has a column for avg 
+#rec boat counts for each radius distance
+overall_rls_data_final <- overall_rls_data_groups_with_openness%>%
+ left_join(rec_fishing_boat_total_radius_1km_final, by = c("site_code"))%>%
+ left_join(rec_fishing_boat_total_radius_1.5km_final, by = c("site_code"))%>%
+  left_join(rec_fishing_boat_total_radius_2km_final, by = c("site_code"))%>%
+  replace(is.na(.), 0)
+
+
+length(unique(overall_rls_data_final$site_code[overall_rls_data_final$protection_status == "unprotected"]))
+```
+
+
+### Saving the final dataframe
+
+```{r Saving the final dataframe}
+#write_csv(overall_rls_data_final, file = here("./03_clean_data/final_rls_data.csv"))
+```
+
+# Making some plots
+
+## Making a theme for all subsequent figures
+
+```{r Making theme for all subsequent figures, echo=FALSE}
+theme.figure <- function (){
+  theme_bw(base_size = 12) +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    #axis.line = element_line(colour = "black"),
+    axis.title = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 14, face = "plain"),
+    legend.text = element_text(size = 12, face = "plain"),
+    legend.title = element_text(size = 14, face = "bold")) 
+}
+```
+
+## Making site maps
+
+### Making the map ranges
+
+```{r Seting the ranges for the maps}
+#In this chunk I made limits for the maps so that they show the view of 
+#Barkley Sound that I want
+lat_min = min(overall_rls_data_final$latitude) - 0.05
+lat_max = max(overall_rls_data_final$latitude) + 0.05
+
+long_min = min(overall_rls_data_final$longitude) - 0.05
+long_max = max(overall_rls_data_final$longitude) + 0.05
+```
+
+
+### Loading in the low res shape file
+
+```{r Loading in the base layer}
+#I loaded in a lower res shape file that shows all of BC in order to make a
+#large inset plot of Vancouver Island. Similar to the high res shape file I 
+#subsetted it to only include the area around Vancouver Island.
+
+VI_base_layer <- read_sf(dsn = here("./01_raw_data/canada_sf_data", ""), 
+                         stringsAsFactors = F)
+VI_base_layer_sf <- st_as_sf(VI_base_layer)
+
+#specifying the projection for the sf
+st_crs(VI_base_layer_sf) <- "+proj=longlat +datum=WGS84 +no_defs"
+
+
+shp_xmin_low <- -129
+shp_xmax_low <- -122.5
+shp_ymin_low <- 48
+shp_ymax_low <- 52
+
+bbox_low <- st_bbox(c(xmin = shp_xmin_low, ymin = shp_ymin_low, xmax = shp_xmax_low, ymax = shp_ymax_low))
+
+bbox_low_sf <- st_as_sfc(bbox_low)
+
+VI_base_layer_sf_subset <- st_crop(VI_base_layer_sf, bbox_low_sf)
+#plot(VI_base_layer_sf_subset)
+```
+
+### Loading in the shapefiles for the protected areas
+
+In order to show the protected areas within Barkley Sound I used Google Earth to make kml files with polygons of the protected areas.
+
+```{r loading in the RCA polygon}
+#st_read loads in the kml file and stores it as a polygon
+broken_group_RCA <- st_read(here("./01_raw_data/Broken_group_RCA.kml"))
+```
+
+```{r Loading in the Numukamis area}
+numukamis_area <- st_read(here("./01_raw_data/Numukamis_closed_area.kml"))
+```
+
+```{r Loading in the Baeria rocks}
+baeria_rocks_er <- st_read(here("./01_raw_data/baeria_rocks.kml"))
+```
+
+### Loading in the flight track for the DFO surveys
+
+I also traced the DFO flight path used for the DFO flyover surveys in Barkley Sound using Google Earth and saved it as a kml file.
+
+```{r Loading in the DFO flight track for Barkley Sound}
+#This loads in the flight path so that it can be put on the plot.
+dfo_flight_track <- st_read(here("./01_raw_data/dfo_new_flight_path.kml"))
+```
+
+
+###Shifting a couple of the sites to make it clearer
+
+In order to not have a bunch of the sites overlapping each other when plotting maps I shifted some of the points slightly.
+
+```{r Shifting some sites}
+overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
+  #These lines of code change the lat or long of the specified site to the given value
+ mutate(longitude = if_else(site_code == "BMSC11", -125.153, longitude))%>%
+  mutate(latitude = if_else(site_code == "BMSC5", 48.82333, latitude))%>%
+  mutate(latitude = if_else(site_code == "BMSC9", 48.83179, latitude))%>%
+  mutate(longitude = if_else(site_code == "BMSC9", -125.1490, longitude))%>%
+  mutate(longitude = if_else(site_code == "BMSC7", -125.16, longitude))
+```
+
+
+## Figure 1: Overall site map
+
+```{r Making the inset map}
+#This makes a map of Vancouver Island
+(van_isl_map <- ggplot(VI_base_layer_sf_subset) +
+   #allows visualization of sf objects
+  geom_sf() +
+   #Sets limits for the plot
+  coord_sf(ylim = c(48.3, 50.8), xlim = c(-128.2, -123.2)) +
+  theme.figure() +
+   #Makes a red rectangle around Barkley Sound
+  geom_rect(xmin = long_min, xmax = long_max, ymin = lat_min, ymax = lat_max,
+           color = "red", fill = NA, linewidth = 1) +
+  labs(x = "Longitude", y = "Latitude")+
+   theme(axis.text = element_blank(),
+         axis.title = element_blank(),
+         axis.ticks = element_blank()))
+```
+
+```{r Overall site map with the site locations}
+#This makes a map of Barkley Sound with the RLS sites and protected areas
+(overall_site_map <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+   #The lines below plot the polygons of the different protected areas within
+   #the sound
+   geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+  # geom_sf(data = folger_pass_RCA, fill = "blue", colour = "blue", alpha = 0.2)+
+   #This adds in the points of the survey sites, shifted slightly to be not 
+   #overlapping
+     geom_point(overall_rls_data_final_minor_shifted, 
+              mapping = aes(x = longitude, y = latitude, fill = protection_status),
+              shape = 21, size = 3,
+              colour = "black")+
+   scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  # scale_shape_manual(values = c(24, 21, 22, 23))+
+   #Specifies the colours for unprotected and protected sites
+  # scale_fill_manual(values = c("black", "white"))+
+       coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.04))+
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Protection\nStatus") +
+  theme.figure() +
+  scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+ # scale_y_continuous(breaks = c(48.80, 48.85, 48.90, 48.95, 49.00))+
+  #Adds in an arrow indicating north
+   annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+   #adds in a scale bar
+  annotation_scale(location = "br", text_cex = 1.3)+
+   guides(
+  fill = guide_legend(override.aes = list(shape = 21)),
+  shape = guide_legend(override.aes = list(fill = "white"))
+)+
+    theme(legend.position = "inside",
+      legend.position.inside = c(0.84, 0.2),
+         axis.text.y = element_text(angle = 45),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 14),
+      legend.margin = margin(0.3, 0.3, 0.3, 0.3))+
+  #Adds a diamond for Bamfield
+  geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange")+
+  #Adds a triangle for Pill Point
+  geom_point(aes(x = -125.082355, y = 48.966445), shape = 24, size = 5, fill = "#73D055FF"))
+```
+
+```{r Making the site map with the van isl inset}
+#This makes the overall map with the inset of vancouver island
+(site_map_w_inset <- ggdraw(overall_site_map) +
+  draw_plot(van_isl_map, x = 0.1, y = 0.15, width = 0.5, height = 0.3))
+```
+
+This was the rough version of the plot and then I saved it as a pdf and used inkscape to fine tune the locations of the legends and inset.
+
+```{r Saving the site map}
+ggsave("site_map_with_inset_regions.pdf", plot = site_map_w_inset,
+       path = here("./04_plots/manuscript_figures_rough"),
+       width = 165, height = 130, units = "mm")
+```
+
+## Figure 4: Boxplots of number of boats between protected and unprotected sites
+
+This makes the plot of the average number of fishing boats around the different
+RLS sites
+```{r Making a data frame with only unique rows for the sites}
+unique_site_df <- overall_rls_data_final%>%
+  distinct(site_code, protection_status, mean_rec_boat_counts_1km, mean_rec_boat_counts_1.5km,
+           mean_rec_boat_counts_2km)
+
+#Reordering the levels of protection status so unprotected is first
+unique_site_df$protection_status <- factor(unique_site_df$protection_status,
+                                           levels = c("protected", "unprotected"))
+
+unique_site_df$protection_status <- recode(unique_site_df$protection_status,
+                                           protected = "P", unprotected = "UP")
+```
+
+```{r Boxplot of mean rec boats between protection levels 1.5 km}
+(rec_boats_boxplot_1.5km <- ggplot(unique_site_df, aes(x = protection_status,
+                                                     y = mean_rec_boat_counts_1.5km,
+                                                     fill = protection_status))+
+  geom_boxplot(alpha = 0.6, width = 0.4)+
+   #Adding jittered raw data but only jittering on the x axis so it is the 
+   #true boat count values
+  #geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
+  labs(x = "Protection Status", y = "Mean rec.\nboat counts")+
+     scale_fill_manual(values = c("#355173", "#E95E48"))+
+  theme.figure()+
+   theme(legend.position = "none",
+     #    axis.text.x = element_blank(),
+         axis.title.y = element_blank()))
+      #   axis.ticks.x = element_blank()))
+```
+
+```{r Boxplot of mean rec boats between protection levels 1 km}
+(rec_boats_boxplot_1km <- ggplot(unique_site_df, aes(x = protection_status,
+                                                     y = mean_rec_boat_counts_1km,
+                                                     fill = protection_status))+
+  geom_boxplot(alpha = 0.6, width = 0.4)+
+ # geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
+  labs(x = "Protection Status", y = "Mean rec.\nboat counts")+
+     scale_fill_manual(values = c("#355173", "#E95E48"))+
+  theme.figure()+
+   theme(legend.position = "none"))
+     #    axis.text.x = element_blank(),
+         #axis.title.y = element_blank()))
+      #   axis.ticks.x = element_blank()))
+```
+
+```{r Boxplot of mean rec boats between protection levels 2 km}
+(rec_boats_boxplot_2km <- ggplot(unique_site_df, aes(x = protection_status,
+                                                     y = mean_rec_boat_counts_2km,
+                                                     fill = protection_status))+
+  geom_boxplot(alpha = 0.6, width = 0.4)+
+  #geom_jitter(height = 0, width = 0.2, colour = "darkgrey", alpha = 0.5)+
+  labs(x = "Protection Status", y = "Mean rec.\nboat counts",
+       fill = "Protection Status")+
+     scale_fill_manual(values = c("#355173", "#E95E48"))+
+  theme.figure()+
+   theme(legend.position = "none",
+     axis.title.y = element_blank()))
+```
+
+```{r Combining the three plots into one}
+rec_boats_overall_boxplots <- rec_boats_boxplot_1km + rec_boats_boxplot_1.5km + rec_boats_boxplot_2km
+
+rec_boats_overall_boxplots
+```
+
+
+This was imported to inkscape where labels for the radii used were added (1, 1.5, 2, from left to right). Also the x axis labels were edited to just be UP and P
+
+```{r Saving the rec boat counts boxplot figure}
+ggsave("rec_boats_boxplot_overall.pdf", plot = rec_boats_overall_boxplots,
+       path = here("./04_plots/manuscript_figures_rough"), width = 180, height = 80, units = "mm")
+```
+
+## Figure 3: Example of the DFO overflight data and RLS site radii
+
+For this plot we used 2023 and 1.5 km radii as examples of the data we saw for the rec boat counts
+
+```{r total rec boats within 1.5 km}
+(total_rec_boats_map_2023_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+   #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+  geom_point(data = rec_boats_fishing2023, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+A legend was added and the flight path line styling was edited using inkscape.
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_2023_test,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
+
+
+# Doing further analysis of the DFO boat data
+
+Given that the DFO data is novel and provides exciting opportunities to look at the spatial properties of fishing within Barkley Sound, I will do further analysis of the boat locations, including the number of boats spotted in protected areas compared to the number of boats spotted in total, and a kernel analysis to obtain a heat map of fishing pressure in the sound.
+
+## Number of boats spotted within protected areas relative to total boats spotted
+
+```{r Finding the number of boats spotted within protected areas}
+#Specifies to use the GEOS engine. Turns off the spherical geometry
+sf::sf_use_s2(FALSE)
+
+
+#This line loads in the recreational fishing boat data and converts the lat and
+#long to an sf object in the same CRS as the sf objects for the protected areas
+rec_boats_fishing_total_points_wgs84 <- st_as_sf(rec_boats_fishing_total, coords = c("Longitude", "Latitude"), crs = 4326)
+
+
+#These lines return the rec boat observations that are found within the 
+#protected area polygons
+rec_boats_within_numukamis <- st_intersection(numukamis_area, rec_boats_fishing_total_points_wgs84)
+
+rec_boats_within_broken_group_RCA <- st_intersection(broken_group_RCA, rec_boats_fishing_total_points_wgs84)
+
+rec_boats_within_baeria_rocks_er <- st_intersection(baeria_rocks_er, rec_boats_fishing_total_points_wgs84)
+```
+
+
+The Numukamis bay finfish closure area is only closed for a portion of the year
+so this chunk filters so that it only counts the boats fishing within the 
+protected area during the months that the area is closed to fishing.
+```{r Filtering the Numukamis Bay boats to only include ones fishing there when it is actually closed}
+rec_boats_within_numukamis_final <- rec_boats_within_numukamis%>%
+  filter((Date >= as.Date("2021-08-01") & Date <= as.Date("2021-09-30")) |
+           (Date >= as.Date("2022-08-01") & Date <= as.Date("2022-09-30")) |
+           (Date >= as.Date("2023-08-01") & Date <= as.Date("2023-09-30")))
+```
+
+
+```{r Summing the total number of boats in protected areas and outside}
+#These lines add up all of the boats spotted within each protected area
+total_boats_broken_group_RCA <- sum(rec_boats_within_broken_group_RCA$rec_boats_fishing)
+total_boats_baeria_rocks_er <- sum(rec_boats_within_baeria_rocks_er$rec_boats_fishing)
+total_boats_numukamis <- sum(rec_boats_within_numukamis_final$rec_boats_fishing)
+
+
+#This adds up all of the boats for a total number spotted across all protected
+#areas
+total_boats_in_protected_areas <- total_boats_broken_group_RCA + total_boats_baeria_rocks_er +
+  total_boats_numukamis
+
+#This adds up all of the rec boats fishing that were spotted within Barkley 
+#Sound.
+total_boats_spotted_barkley <- sum(rec_boats_fishing_total$rec_boats_fishing)
+#These specify how many spotted in each year
+total_boats_spotted_barkley_2021 <- sum(rec_boats_fishing2021_subset$rec_boats_fishing)
+total_boats_spotted_barkley_2022 <- sum(rec_boats_fishing2022_subset$rec_boats_fishing)
+total_boats_spotted_barkley_2023 <- sum(rec_boats_fishing2023_subset$rec_boats_fishing)
+
+#This line calculate the percentage of observations found in protected areas
+percent_boats_in_protected_areas <- (total_boats_in_protected_areas/total_boats_spotted_barkley) * 100
+```
+
+
+
+## Kernel Density Estimation for the recreational fishing boats
+
+To identify fishing hotspots within Barkley Sound I used a Kernel Density
+Estimation analysis with the sparr package. The workflow below calculates the 
+KDE and then plots it on a map of Barkley Sound to visualize the hotspots.
+
+### Specifying the ocean area and removing the islands
+
+```{r Making ocean mask}
+#This makes a box of the area (Barkley Sound) where the boat points that we are interested in 
+#are
+kde_study_area <- st_as_sfc(st_bbox(rec_boat_points_for_kde))
+kde_study_area_21 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_21))
+kde_study_area_22 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_22))
+kde_study_area_23 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_23))
+
+#This creates the ocean mask (i.e. the study area minus the land). I removed the
+#land area because it is impossible for boats to be observed fishing on land
+ocean_mask <- st_difference(kde_study_area, st_union(VI_base_layer_hi_res_sf_subset_projected))
+ocean_mask_21 <- st_difference(kde_study_area_21, st_union(VI_base_layer_hi_res_sf_subset_projected))
+ocean_mask_22 <- st_difference(kde_study_area_22, st_union(VI_base_layer_hi_res_sf_subset_projected))
+ocean_mask_23 <- st_difference(kde_study_area_23, st_union(VI_base_layer_hi_res_sf_subset_projected))
+```
+
+### Converting points to spatstat ppp object type
+
+```{r Converting points into object that can be used for kde}
+#This converts the ocean mask into an owin object type. An owin is used by the
+#function that calculates the KDE as the area to look in.
+ocean_owin <- as.owin(ocean_mask)
+ocean_owin_21 <- as.owin(ocean_mask_21)
+ocean_owin_22 <- as.owin(ocean_mask_22)
+ocean_owin_23 <- as.owin(ocean_mask_23)
+
+#This converts the rec boat points into ppp object, and uses the ocean owin
+#as the boundary
+rec_boats_ppp <- as.ppp(st_coordinates(rec_boat_points_for_kde), W = ocean_owin)
+rec_boats_ppp_21 <- as.ppp(st_coordinates(rec_boat_points_for_kde_21), W = ocean_owin_21)
+rec_boats_ppp_22 <- as.ppp(st_coordinates(rec_boat_points_for_kde_22), W = ocean_owin_22)
+rec_boats_ppp_23 <- as.ppp(st_coordinates(rec_boat_points_for_kde_23), W = ocean_owin_23)
+```
+
+### Picking a pilot bandwidth value via oversmoothing algorithm function
+This will use the ppp object to estimate a bandwidth which we can use below as a starting point for the adaptive bandwidth estimation in the KDE function. This uses the oversmoothing function to estimate the starting bandwidth.
+
+```{r Estimating pilot bandwidth}
+#This will choose the optimal bandwidth for the rec boats kde
+rec_boat_overall_bandwidth <- OS(rec_boats_ppp)
+rec_boat_overall_bandwidth_21 <- OS(rec_boats_ppp_21)
+rec_boat_overall_bandwidth_22 <- OS(rec_boats_ppp_22)
+rec_boat_overall_bandwidth_23 <- OS(rec_boats_ppp_23)
+```
+
+
+### Running the KDE
+
+```{r Running the KDE}
+#This function actually calculates the KDE
+rec_boat_kde_overall_sparr <- bivariate.density(rec_boats_ppp,
+                                                #Using the starting bandwidth we measured before
+                                                h0 = rec_boat_overall_bandwidth,
+                                                ####
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250,
+                                                intensity = TRUE)
+
+rec_boat_kde_overall_sparr_21 <- bivariate.density(rec_boats_ppp_21,
+                                                h0 = rec_boat_overall_bandwidth_21,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+
+rec_boat_kde_overall_sparr_22 <- bivariate.density(rec_boats_ppp_22,
+                                                h0 = rec_boat_overall_bandwidth_22,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+
+rec_boat_kde_overall_sparr_23 <- bivariate.density(rec_boats_ppp_23,
+                                                h0 = rec_boat_overall_bandwidth_23,
+                                                edge = "diggle",
+                                                adapt = TRUE,
+                                                verbose = TRUE,
+                                                resolution = 250)
+```
