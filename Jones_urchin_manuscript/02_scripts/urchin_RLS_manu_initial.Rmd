@@ -3672,9 +3672,9 @@ b20_df_coords$northing <- b20_df_coords_extracted[,2]
 b20_df_coords$easting_km <- b20_df_coords$easting / 1000
 b20_df_coords$northing_km <- b20_df_coords$northing / 1000
 
-#b20_final_df <- b20_final_df%>%
- # left_join(b20_df_coords, by = c("site_code", "site_name", "protection_status",
-                 #                 "survey_date", "depth", "b20_biomass"))
+b20_final_df <- b20_final_df%>%
+  left_join(b20_df_coords, by = c("site_code", "site_name", "protection_status",
+                                  "survey_date", "depth", "b20_biomass"))
 
 b20_mod_site_resids <- simulateResiduals(b20_mod_site)
 #testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)

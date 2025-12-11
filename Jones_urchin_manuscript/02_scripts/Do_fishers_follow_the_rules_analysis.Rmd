@@ -473,25 +473,6 @@ mutate(norm_openness = openness / max_openness)
 overall_rls_data_groups_with_openness <- merge(overall_rls_data_groups, openness, by = c("site_code", "latitude", "longitude"))
 ```
 
-
-## Making a df with only fish species
-For the fish species richness analyses below I needed to make a dataframe with the number of unique fish species observed on each transect which is what the code below does.
-```{r Fish species richness df}
-#Pulls only the unique species observations on each transect
-fish_sp_rich_df_intermediate <- overall_rls_data_expanded%>%
-  distinct(site_code, site_name, survey_date, depth, reporting_name, protection_status, latitude, longitude)
-
-fish_sp_rich_df_intermediate$reporting_name <- as.factor(fish_sp_rich_df_intermediate$reporting_name)
-
-#This counts the number of unique species on each transects and records that in
-#a new column
-fish_sp_rich_df <- fish_sp_rich_df_intermediate%>%
-  group_by(site_code, site_name, survey_date, depth, protection_status, latitude, longitude)%>%
-  summarise(fish_sp_rich = length(unique(reporting_name)))
-```
-
-
-
 ## Adding recreational fishing boat location data to the data frame
 
 To study the recreational fisher compliance of protected areas in Barkley Sound
@@ -1153,6 +1134,31 @@ To identify fishing hotspots within Barkley Sound I used a Kernel Density
 Estimation analysis with the sparr package. The workflow below calculates the 
 KDE and then plots it on a map of Barkley Sound to visualize the hotspots.
 
+```{r Converting the rec boat data into a form for doing the KDE}
+#Because there are some points in the data frame that correspond to mulitple
+#boats observed I will need to uncount the data frame so there is a row for 
+#every boat observation
+rec_boat_points_for_kde <- rec_boats_fishing_total_points_wgs84%>%
+  select(Year, Month, Day, Date, rec_boats_fishing, geometry)%>%
+  uncount(rec_boats_fishing)
+
+#Converting the new dataframe back into an sf object so that the KDE function
+#will work properly and converting to a projection which is better for KDE
+#analysis
+rec_boat_points_for_kde <- st_as_sf(rec_boat_points_for_kde, sf_column_name = "geometry")
+rec_boat_points_for_kde <- st_transform(rec_boat_points_for_kde, crs = 32610)
+
+#Filtering so there is a df for each year
+rec_boat_points_for_kde_21 <- rec_boat_points_for_kde%>%
+  filter(Year == 2021)
+
+rec_boat_points_for_kde_22 <- rec_boat_points_for_kde%>%
+  filter(Year == 2022)
+
+rec_boat_points_for_kde_23 <- rec_boat_points_for_kde%>%
+  filter(Year == 2023)
+```
+
 ### Specifying the ocean area and removing the islands
 
 ```{r Making ocean mask}
@@ -1162,6 +1168,9 @@ kde_study_area <- st_as_sfc(st_bbox(rec_boat_points_for_kde))
 kde_study_area_21 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_21))
 kde_study_area_22 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_22))
 kde_study_area_23 <- st_as_sfc(st_bbox(rec_boat_points_for_kde_23))
+
+#Converting the other aspects of the map into the same projection as the KDE
+VI_base_layer_hi_res_sf_subset_projected <- st_transform(VI_base_layer_hi_res_sf_subset, crs = 32610)
 
 #This creates the ocean mask (i.e. the study area minus the land). I removed the
 #land area because it is impossible for boats to be observed fishing on land
@@ -1208,11 +1217,15 @@ rec_boat_overall_bandwidth_23 <- OS(rec_boats_ppp_23)
 rec_boat_kde_overall_sparr <- bivariate.density(rec_boats_ppp,
                                                 #Using the starting bandwidth we measured before
                                                 h0 = rec_boat_overall_bandwidth,
-                                                ####
+                                                #Specifies the type of edge correction to use. Diggle reweights each observation-specific kernel
                                                 edge = "diggle",
+                                                #True makes the function use the adaptive bandwith method
                                                 adapt = TRUE,
+                                                #True makes a progress bar show below
                                                 verbose = TRUE,
+                                                #Specifies the resolution of the evaluation grid that the density/intensity will be returned on
                                                 resolution = 250,
+                                                #True makes the function return an intensity estimate instead of density
                                                 intensity = TRUE)
 
 rec_boat_kde_overall_sparr_21 <- bivariate.density(rec_boats_ppp_21,
@@ -1235,4 +1248,1163 @@ rec_boat_kde_overall_sparr_23 <- bivariate.density(rec_boats_ppp_23,
                                                 adapt = TRUE,
                                                 verbose = TRUE,
                                                 resolution = 250)
+```
+
+
+### Converting back to objects usable in ggplot
+In order to plot the KDEs I needed to convert them back to objects usable with the ggplot package.
+
+```{r Converting the objects into forms usable in ggplot}
+#converting the spatstat im (image) object to raster
+rec_boat_kde_overall_rast <- raster(rec_boat_kde_overall_sparr$z)
+crs(rec_boat_kde_overall_rast) <- "EPSG:32610"
+
+rec_boat_kde_overall_rast_21 <- raster(rec_boat_kde_overall_sparr_21$z)
+crs(rec_boat_kde_overall_rast_21) <- "EPSG:32610"
+
+rec_boat_kde_overall_rast_22 <- raster(rec_boat_kde_overall_sparr_22$z)
+crs(rec_boat_kde_overall_rast_22) <- "EPSG:32610"
+
+rec_boat_kde_overall_rast_23 <- raster(rec_boat_kde_overall_sparr_23$z)
+crs(rec_boat_kde_overall_rast_23) <- "EPSG:32610"
+
+#Converting back into lat and long for plotting with the hakai shape file
+rec_boat_kde_overall_rast <-  projectRaster(rec_boat_kde_overall_rast, crs = CRS("+proj=longlat +datum=WGS84"))
+rec_boat_kde_overall_rast_21 <-  projectRaster(rec_boat_kde_overall_rast_21, crs = CRS("+proj=longlat +datum=WGS84"))
+rec_boat_kde_overall_rast_22 <-  projectRaster(rec_boat_kde_overall_rast_22, crs = CRS("+proj=longlat +datum=WGS84"))
+rec_boat_kde_overall_rast_23 <-  projectRaster(rec_boat_kde_overall_rast_23, crs = CRS("+proj=longlat +datum=WGS84"))
+
+#Converting into a dataframe for use with ggplot
+rec_boat_kde_overall_df <- as.data.frame(rec_boat_kde_overall_rast, xy = TRUE,
+                                         na.rm = TRUE)
+rec_boat_kde_overall_df_21 <- as.data.frame(rec_boat_kde_overall_rast_21, xy = TRUE,
+                                         na.rm = TRUE)
+rec_boat_kde_overall_df_22 <- as.data.frame(rec_boat_kde_overall_rast_22, xy = TRUE,
+                                         na.rm = TRUE)
+rec_boat_kde_overall_df_23 <- as.data.frame(rec_boat_kde_overall_rast_23, xy = TRUE,
+                                         na.rm = TRUE)
+
+
+#Converting the intensity to units of per km squared from per m squared
+rec_boat_kde_overall_df$layer <- (rec_boat_kde_overall_df$layer * 1e6)
+```
+
+
+### Plotting the KDEs
+
+```{r Plotting the overall KDE}
+#These lines identify the datapoints in the top 20 and 5% of values so contour lines can be plotted on the figure
+threshold_80 <- quantile(rec_boat_kde_overall_df$layer, 0.8, na.rm = TRUE)
+threshold_95 <- quantile(rec_boat_kde_overall_df$layer, 0.95, na.rm = TRUE)
+
+(overall_rec_boat_kde_sparr_map <- ggplot()+
+  geom_raster(data = rec_boat_kde_overall_df, aes(x = x, y = y, fill = layer))+
+   geom_contour(
+    data = rec_boat_kde_overall_df,
+    aes(x = x, y = y, z = layer),
+    color = "red",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_95
+  ) +
+   geom_contour(
+    data = rec_boat_kde_overall_df,
+    aes(x = x, y = y, z = layer),
+    color = "orange",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_80     
+  ) +
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+      geom_sf(data = broken_group_RCA, fill = "white", colour ="white", alpha = 0.3, linewidth = 1)+
+   geom_sf(data = numukamis_area, fill = "white", colour = "white", alpha = 0.3, linewidth = 1)+
+   geom_sf(data = baeria_rocks_er, fill = "white", colour = "white", alpha = 0.3, linewidth = 1)+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar(barheight = unit(2.1, "cm")))+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Intensity") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+    theme.figure()+
+    theme(legend.position = "inside",
+          legend.position.inside = c(0.856, 0.19),
+          legend.title = element_text(size = 13),
+          legend.text = element_text(size = 12),
+          axis.text.y = element_text(angle = 45)))
+```
+
+
+The plot is showing the intensity of boats. Intensity is the average number of points (rec boats) per unit area. The density is proportionate to the intensity but is scaled so that all values sum to 1. The density surface is a probability density function of the rec boat data.
+
+```{r}
+ggsave("overall_rec_boat_KDE_sparr_map.pdf", plot = overall_rec_boat_kde_sparr_map,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+
+ggsave("overall_rec_boat_KDE_sparr_map.png", plot = overall_rec_boat_kde_sparr_map,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
+
+
+```{r Plotting the 2021 KDE}
+threshold_80_21 <- quantile(rec_boat_kde_overall_df_21$layer, 0.8, na.rm = TRUE)
+threshold_95_21 <- quantile(rec_boat_kde_overall_df_21$layer, 0.95, na.rm = TRUE)
+
+
+(rec_boat_kde_sparr_map_21 <- ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df_21, aes(x = x, y = y, fill = layer))+
+     geom_contour(
+    data = rec_boat_kde_overall_df_21,
+    aes(x = x, y = y, z = layer),
+    color = "red",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_95_21          # number of contour levels (adjust as needed)
+  ) +
+   geom_contour(
+    data = rec_boat_kde_overall_df_21,
+    aes(x = x, y = y, z = layer),
+    color = "orange",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_80_21            # number of contour levels (adjust as needed)
+  ) +
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar(barheight = unit(2.1, "cm")))+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()+
+     theme(legend.position = "inside",
+          legend.position.inside = c(0.856, 0.19),
+          legend.title = element_text(size = 13),
+          legend.text = element_text(size = 12),
+          axis.text.y = element_text(angle = 45)))
+```
+
+```{r}
+ggsave("rec_boat_KDE_sparr_21_map.pdf", plot = rec_boat_kde_sparr_map_21,
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
+
+ggsave("rec_boat_KDE_sparr_21_map.png", plot = rec_boat_kde_sparr_map_21,
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
+```
+
+
+```{r Plotting the 2022 KDE}
+threshold_80_22 <- quantile(rec_boat_kde_overall_df_22$layer, 0.8, na.rm = TRUE)
+threshold_95_22 <- quantile(rec_boat_kde_overall_df_22$layer, 0.95, na.rm = TRUE)
+
+(rec_boat_kde_sparr_map_22 <- ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df_22, aes(x = x, y = y, fill = layer))+
+       geom_contour(
+    data = rec_boat_kde_overall_df_22,
+    aes(x = x, y = y, z = layer),
+    color = "red",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_95_22          # number of contour levels (adjust as needed)
+  ) +
+   geom_contour(
+    data = rec_boat_kde_overall_df_22,
+    aes(x = x, y = y, z = layer),
+    color = "orange",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_80_22            # number of contour levels (adjust as needed)
+  ) +
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar(barheight = unit(2.1, "cm")))+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()+
+         theme(legend.position = "inside",
+          legend.position.inside = c(0.856, 0.19),
+          legend.title = element_text(size = 13),
+          legend.text = element_text(size = 12),
+          axis.text.y = element_text(angle = 45)))
+```
+
+```{r}
+ggsave("rec_boat_KDE_sparr_22_map.pdf", plot = rec_boat_kde_sparr_map_22,
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
+
+ggsave("rec_boat_KDE_sparr_22_map.png", plot = rec_boat_kde_sparr_map_22,
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
+```
+
+```{r Plotting the 2023 KDE}
+threshold_80_23 <- quantile(rec_boat_kde_overall_df_23$layer, 0.8, na.rm = TRUE)
+threshold_95_23 <- quantile(rec_boat_kde_overall_df_23$layer, 0.95, na.rm = TRUE)
+
+(rec_boat_kde_sparr_map_23 <- ggplot()+
+  # geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_raster(data = rec_boat_kde_overall_df_23, aes(x = x, y = y, fill = layer))+
+           geom_contour(
+    data = rec_boat_kde_overall_df_23,
+    aes(x = x, y = y, z = layer),
+    color = "red",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_95_23          # number of contour levels (adjust as needed)
+  ) +
+   geom_contour(
+    data = rec_boat_kde_overall_df_23,
+    aes(x = x, y = y, z = layer),
+    color = "orange",      # line color
+    size = 0.6,           # line thickness
+    breaks = threshold_80_23            # number of contour levels (adjust as needed)
+  ) +
+  geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  scale_fill_viridis_c(option = "B", begin = 0.1, direction = 1,
+                       guide = guide_colorbar(barheight = unit(2.1, "cm")))+
+     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+           ylim = c(lat_min + 0.02, lat_max - 0.026))+
+    scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  labs(x = "Longitude", y = "Latitude", shape = "Region",
+       fill = "Recreational\nBoat Density") +
+    annotation_scale(location = "bl", text_cex = 1.3,
+                     text_col = "white",
+                     line_col = "white")+
+  theme.figure()+
+       theme(legend.position = "inside",
+          legend.position.inside = c(0.856, 0.19),
+          legend.title = element_text(size = 13),
+          legend.text = element_text(size = 12),
+          axis.text.y = element_text(angle = 45)))
+```
+
+```{r}
+ggsave("rec_boat_KDE_sparr_23_map.pdf", plot = rec_boat_kde_sparr_map_23,
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
+
+ggsave("rec_boat_KDE_sparr_23_map.png", plot = rec_boat_kde_sparr_map_23,
+       path = here("./04_plots/extra_figures"), width = 160, height = 120, units = "mm")
+```
+
+
+## Testing the differences in rec boat counts between protected and non-protected with stats
+
+After seeing the clear trend of fewer boats on average around protected sites,
+in the plots above, we wanted to use stats to actually see if there was a significant difference
+between protected and unprotected sites. Due to the non-normal distributions of the boat counts, we used a Wilcoxon rank-sum test.
+
+### Checking for assumptions of linear models
+
+```{r Testing the variance between protection status}
+#In order to run stats tests on the boat counts we need to make sure the data
+#meets the assumptions of linear models. Here we use a levene's test to see
+#if there is equal variance between protected and unprotected sites. We do this
+#for each of the three radii.
+
+leveneTest(mean_rec_boat_counts_1km ~ protection_status, data = unique_site_df)
+leveneTest(mean_rec_boat_counts_1.5km ~ protection_status, data = unique_site_df)
+leveneTest(mean_rec_boat_counts_2km ~ protection_status, data = unique_site_df)
+```
+
+Equal variance for 1km, but not for 1.5km or 2km.
+
+
+```{r Normality of rec boat counts within protected sites}
+#The second assumption that we tested for was normality of the data. This chunk
+#makes a df that contains only sites within the protected areas to test for 
+#normality within this group.
+
+#Making data frame with only sites that are protected
+rec_boat_protected <- subset(unique_site_df, protection_status == "P")
+
+#Using shapiro wilks test to see if the mean rec boat counts are normal
+shapiro.test(rec_boat_protected$mean_rec_boat_counts_1km)
+#using histogram to look at normality visually
+hist(rec_boat_protected$mean_rec_boat_counts_1km)
+
+shapiro.test(rec_boat_protected$mean_rec_boat_counts_1.5km)
+hist(rec_boat_protected$mean_rec_boat_counts_1.5km)
+
+shapiro.test(rec_boat_protected$mean_rec_boat_counts_2km)
+hist(rec_boat_protected$mean_rec_boat_counts_2km)
+```
+Only the 1.5 km boat counts are normal
+
+```{r Normality of rec boat counts within non-protected sites}
+#This chunk follows the same steps as the previous one however it is for the 
+#unprotected sites.
+
+#Making data frame with only sites that are non-protected
+rec_boat_non_protected <- subset(unique_site_df, protection_status == "UP")
+
+shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_1km)
+hist(rec_boat_non_protected$mean_rec_boat_counts_1km)
+
+shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_1.5km)
+hist(rec_boat_non_protected$mean_rec_boat_counts_1.5km)
+
+shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_2km)
+hist(rec_boat_non_protected$mean_rec_boat_counts_2km)
+```
+
+2km is normal but the others are not.
+
+Because we have not met the assumptions of normality or homoscedasticity for 
+all of our groups we need a non-parametric test. Instead we used 
+Wilcoxon Rank sum tests.
+
+
+### Wilcoxon rank sum tests of the mean recreational boat counts
+
+```{r Wilcoxon rank sum tests of mean rec boat counts between protected and non-protected sites}
+#These lines of code run a separate wilcoxon rank sum test for each of the three
+#radii that we looked at. Since alternative was set to "t" it is a two tailed
+#test
+wilcox_1km <- wilcox.test(mean_rec_boat_counts_1km ~ protection_status, data = unique_site_df, alternative = "t")
+wilcox_1.5km <- wilcox.test(mean_rec_boat_counts_1.5km ~ protection_status, data = unique_site_df, alternative = "t")
+wilcox_2km <- wilcox.test(mean_rec_boat_counts_2km ~ protection_status, data = unique_site_df, alternative = "t")
+
+print(wilcox_1km)
+print(wilcox_1.5km)
+print(wilcox_2km)
+```
+
+All of the wilcoxon rank sum tests indicate that there is a highly significant
+difference in the number of rec fishing boats between protected and non-protected
+sites. Based on the boxplots we can say that there are significantly more rec
+boats at unprotected sites than protected sites.
+
+# Species Modelling
+
+I will be using the glmmTMB and sdmTMB packages to create models looking at the abundances/densities of urchins, fish, and other invertebrates at the RLS sites within Barkley Sound. The models will be based on the protection status of the survey sites as the predictor variable.
+
+For simplicity I will only include the final model used for each species below.
+
+## Set up for doing spatial analyses on the data
+
+To be able to use sdmTMB I needed to make a spatial mesh which was done in the following chunks.
+
+### Adding columns of projected coordinates for the sites
+
+```{r Adding a column of projected locations for the sites}
+#changing the data frame to have the coordinates as a geometry type in WGS84
+overall_rls_data_final_geo <- st_as_sf(overall_rls_data_final, 
+                                       coords = c("longitude", "latitude"),
+                                       crs = 4326)
+#converting the coordinates to a projection from around Vancouver Island
+overall_rls_data_final_proj <- st_transform(overall_rls_data_final_geo, crs = 32610)
+#Making a df with only unique projected sites
+unique_overall_rls_data_final_proj <- overall_rls_data_final_proj%>%
+  distinct(site_code, site_name, geometry)
+
+#Extracting the projected coordinates
+coords_utm <- st_coordinates(overall_rls_data_final_proj)
+
+#adding the projected coordinates to the main data frame
+overall_rls_data_final$easting <- coords_utm[,1]
+overall_rls_data_final$northing <- coords_utm[,2]
+
+#adding columns with the data in km
+overall_rls_data_final$easting_km <- overall_rls_data_final$easting / 1000
+overall_rls_data_final$northing_km <- overall_rls_data_final$northing / 1000
+
+#Making another df with only the unique sites for the mesh
+#### We tested this and the mesh is the same as when they are multiple rows
+#for each site
+#unique_overall_rls_data_final <- overall_rls_data_final%>%
+#  distinct(site_code, northing_km, easting_km)
+```
+
+### Making the mesh
+
+```{r Creating a mesh of the RLS sites}
+mesh_RLS <- make_mesh(overall_rls_data_final,
+                      xy_cols = c("easting_km", "northing_km"),
+                      type = "cutoff",
+                      cutoff = 1)
+
+plot(mesh_RLS)
+```
+
+I tried a few different distances for the cutoff but 1 km gave the best balance between resolution and overfitting.
+
+### Fish abundance model
+
+The first model that I will attempt to construct will be looking at the abundance of fish between protected and unprotected sites.
+
+#### Looking at distributions of total fish abundance 
+
+```{r Looking at distribution of total fish abundance}
+hist(overall_rls_data_final$total_fish)
+
+unprotected_total_fish <- overall_rls_data_final%>%
+  filter(protection_status == "unprotected")
+hist(unprotected_total_fish$total_fish)
+
+protected_total_fish <- overall_rls_data_final%>%
+  filter(protection_status == "protected")
+hist(protected_total_fish$total_fish)
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_fish))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+#### Fish ab spatiotemp
+
+The model used was fit with sdmTMB. 
+
+```{r Fish abundance spatiotemporal}
+fish_ab_spatiotemp <- sdmTMB(
+  data = overall_rls_data_final,
+  formula = total_fish ~ protection_status,
+  mesh = mesh_RLS,
+  family = sdmTMB::nbinom2(link = "log"),
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "AR1"
+)
+
+fish_ab_spatiotemp
+sanity(fish_ab_spatiotemp)
+
+tidy(fish_ab_spatiotemp, conf.int = TRUE)
+```
+
+```{r Testing Fish ab spatiotemp model fit}
+set.seed(123)
+fish_ab_spatiotemp_resids <- residuals(fish_ab_spatiotemp, type = "mle-mvn")
+fish_ab_spatiotemp_resids <- fish_ab_spatiotemp_resids[is.finite(fish_ab_spatiotemp_resids)]
+qqnorm(fish_ab_spatiotemp_resids);abline(0, 1)
+#qqline(fish_ab_spatial_resids)
+
+
+sim_fish_ab_spatiotemp_resids <- simulate(fish_ab_spatiotemp, nsim = 500, type = "mle-mvn")
+r_fish_ab_spatiotemp <- dharma_residuals(sim_fish_ab_spatiotemp_resids, fish_ab_spatiotemp, return_DHARMa = TRUE)
+plot(r_fish_ab_spatiotemp)
+DHARMa::testResiduals(r_fish_ab_spatiotemp)
+
+
+#Testing for spatial autocorrelation
+#testSpatialAutocorrelation(r_fish_ab_spatiotemp, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+#Since there are multiple transcets from the same sites their residuals need to be grouped and averaged. This groups them
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+#This recalculates the residuals with the grouping structure
+fish_ab_spatiotemp_resids_2 <- recalculateResiduals(r_fish_ab_spatiotemp, group = site_group)
+#This tests for spatial autocorrelation
+testSpatialAutocorrelation(fish_ab_spatiotemp_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+
+No spatial autocorrelation with the sdmTMB model. All warnings removed when using the spatiotemporal model with AR1.
+
+```{r Looking at predictor significance}
+summary(fish_ab_spatiotemp$sd_report, select = "fixed", p.value = TRUE)
+```
+
+
+### Fish species richness model
+
+In this model I tested the transect level species richness of fish to see if there were differences between protected and unprotected transects. I started by making a dataframe that only had fish, and then counted the unique species observed at each transect.
+
+#### Making a DF of unique fish species
+
+```{r Expanding the long format data so that each individual fish has its own row}
+overall_rls_data_expanded_initial <- overall_rls_data_raw_lat_long%>%
+  filter(phylum == "Chordata")%>%
+  filter(class != "Mammalia")%>%
+  #This replicates each row by the number of counts of each fish in total
+  uncount(total)
+```
+
+```{r Cleaning up the data and adding the necessary variables}
+#Removing unnecessary columns
+overall_rls_data_expanded <- overall_rls_data_expanded_initial%>%
+  select(-c("FID", "survey_id", "country", "area", "ecoregion", "realm", "location", "program",
+            "survey_latitude", "survey_longitude", "geom"))
+
+
+#Cutting the other sites
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+overall_rls_data_expanded$site_code <- as.factor(overall_rls_data_expanded$site_code)
+overall_rls_data_expanded$site_name <- as.factor(overall_rls_data_expanded$site_name)
+overall_rls_data_expanded$protection_status <- as.factor(overall_rls_data_expanded$protection_status)
+
+
+#Extracting the year from the date column and then making a new column called
+#year
+overall_rls_data_expanded$year <- format(overall_rls_data_expanded$survey_date, "%Y")
+
+overall_rls_data_expanded$year <- as.numeric(overall_rls_data_expanded$year)
+
+#Adding columns for site kelp characteristics
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))
+
+overall_rls_data_expanded <- overall_rls_data_expanded%>%
+  mutate(kelp_pa = case_when(
+    kelp %in% c("Forest", "Understory") ~ "Present",
+    kelp %in% c("Prior forest", "Prior understory", "Barren") ~ "Absent"
+  ))
+
+overall_rls_data_expanded$reporting_name <- as.character(overall_rls_data_expanded$reporting_name)
+#Replacing the NAs
+#The Embiotocidae one
+overall_rls_data_expanded$reporting_name[is.na(overall_rls_data_expanded$reporting_name) &
+                                          overall_rls_data_expanded$site_code == "BMSC11"] <- "Embiotocidae spp."
+#The percidae one
+overall_rls_data_expanded$reporting_name[is.na(overall_rls_data_expanded$reporting_name) &
+                                           overall_rls_data_expanded$site_code == "BMSC6"] <- "Percidae spp."
+```
+
+
+```{r Fish species richness df}
+#Pulls only the unique species observations on each transect
+fish_sp_rich_df_intermediate <- overall_rls_data_expanded%>%
+  distinct(site_code, site_name, survey_date, depth, reporting_name, protection_status, latitude, longitude)
+
+fish_sp_rich_df_intermediate$reporting_name <- as.factor(fish_sp_rich_df_intermediate$reporting_name)
+
+#This counts the number of unique species on each transects and records that in
+#a new column
+fish_sp_rich_df <- fish_sp_rich_df_intermediate%>%
+  group_by(site_code, site_name, survey_date, depth, protection_status, latitude, longitude)%>%
+  summarise(fish_sp_rich = length(unique(reporting_name)))
+```
+
+#### Looking at the species richness distribution
+
+```{r Checking the distribution of the fish species richness data}
+hist(fish_sp_rich_df$fish_sp_rich)
+
+unprotected_fish_sp_rich <- fish_sp_rich_df%>%
+  filter(protection_status == "unprotected")
+hist(unprotected_fish_sp_rich$fish_sp_rich)
+
+protected_fish_sp_rich <- fish_sp_rich_df%>%
+  filter(protection_status == "protected")
+hist(protected_fish_sp_rich$fish_sp_rich)
+
+ggplot(fish_sp_rich_df, aes(x = protection_status, y = fish_sp_rich))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+#### Fish species richness glmm site
+
+For fish species richness I was able to use glmmTMB as there was not the same issue of autocorrelation of residuals.
+```{r Fish sp rich glmm site}
+fish_sp_rich_glmm_site <- glmmTMB(fish_sp_rich ~ protection_status + (1|site_code),#Adding site as a random intercept
+                             data = fish_sp_rich_df,
+                             family = glmmTMB::nbinom2(link = "log"))
+
+fish_sp_rich_glmm_site
+
+#Using DHARMa to look at model fit
+fish_sp_rich_glmm_site_resids <- simulateResiduals(fish_sp_rich_glmm_site)
+plot(fish_sp_rich_glmm_site_resids)
+testDispersion(fish_sp_rich_glmm_site_resids)
+
+summary(fish_sp_rich_glmm_site)
+```
+
+```{r Testing for spatial autocorrelation for fish sp rich mod site}
+#For this I made another df of coordinates from the fish sp richness df just to be safe
+fish_sp_rich_df_coords <- st_as_sf(fish_sp_rich_df, coords = c("longitude", "latitude"), crs = 4326)
+fish_sp_rich_df_coords <- st_transform(fish_sp_rich_df_coords, 32610)
+
+fish_sp_rich_df_coords_extracted <- st_coordinates(fish_sp_rich_df_coords)
+fish_sp_rich_df_coords$easting <- fish_sp_rich_df_coords_extracted[,1]
+fish_sp_rich_df_coords$northing <- fish_sp_rich_df_coords_extracted[,2]
+fish_sp_rich_df_coords$easting_km <- fish_sp_rich_df_coords$easting / 1000
+fish_sp_rich_df_coords$northing_km <- fish_sp_rich_df_coords$northing / 1000
+
+fish_sp_rich_df <- fish_sp_rich_df%>%
+ left_join(fish_sp_rich_df_coords, by = c("site_code", "site_name", "protection_status",
+                                 "survey_date", "depth", "fish_sp_rich"))
+fish_sp_rich_glmm_site_resids <- simulateResiduals(fish_sp_rich_glmm_site)
+
+site_group_sp <- fish_sp_rich_df$site_code
+group_locations_sp <- aggregate(fish_sp_rich_df[, c("easting_km", "northing_km")], list(site_group_sp), mean)
+
+fish_sp_rich_glmm_site_resids_2 <- recalculateResiduals(fish_sp_rich_glmm_site_resids, group = site_group_sp)
+testSpatialAutocorrelation(fish_sp_rich_glmm_site_resids_2, x = group_locations_sp$easting_km, y = group_locations_sp$northing_km)
+```
+No spatial autocorrelation
+
+
+### B20 Modelling for fish
+
+#### Creating a dataframe
+
+To look at B20 impacts we needed to make a data frame with only observations of fish greater than 20 cm in length, and then have counts or biomass for each transect.
+
+```{r Creating a B20 dataframe}
+b20_df <- overall_rls_data_raw_lat_long_updated_names%>%
+  select(site_code, site_name, latitude, longitude, survey_date, depth, 
+         visibility, phylum, class, order, family, species_name, reporting_name, 
+         size_class, total, biomass)%>%
+  #These filter to only have fish in the df
+  filter(phylum == "Chordata")%>%
+  filter(class != "Mammalia")%>%
+  
+  #This will make the biomass of all observations less than 20 equal to 0. Then
+  #when I sum the biomass in the later step the sites that do not have any
+  #fish over 20cm will still be there but have a b20 of 0
+  mutate(biomass = if_else(size_class < 20,
+                           0,
+                           biomass))%>%
+  filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7",
+                          "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))
+
+b20_df <- b20_df[,c(1, 2, 17, seq(3, 16, by = 1))]
+
+##print(unique(overall_rls_data_clean$reporting_name))
+
+b20_df$site_code <- as.factor(b20_df$site_code)
+b20_df$site_name <- as.factor(b20_df$site_name)
+b20_df$protection_status <- as.factor(b20_df$protection_status)
+```
+
+```{r Summing Biomass for each transect}
+b20_final_df <- b20_df%>%
+  group_by(site_code, site_name, protection_status, latitude, longitude, survey_date, depth)%>%
+  #dividing by 1000 to make biomass in kg
+  summarise(b20_biomass = sum((biomass/1000)))
+
+
+#adding total fish abundance to see if it correlates with B20
+b20_abundance_df <- b20_final_df%>%
+  left_join(overall_rls_data_final, by = c("site_code", "site_name", "survey_date", "depth", "protection_status"))
+```
+
+
+#### Looking at B20 biomass distribution
+
+```{r}
+hist(b20_final_df$b20_biomass[b20_final_df$protection_status == "protected"])
+hist(b20_final_df$b20_biomass[b20_final_df$protection_status == "unprotected"])
+```
+
+
+##### B20 mod with site
+
+```{r B20 glmm}
+b20_mod_site <- glmmTMB(b20_biomass ~ protection_status + (1|site_code),
+                        data = b20_final_df,
+                        family = glmmTMB::tweedie(link = "log"))
+
+b20_mod_site
+
+#using DHARMa to look at model fit
+b20_mod_site_resids <- simulateResiduals(b20_mod_site)
+plot(b20_mod_site_resids)
+
+summary(b20_mod_site)
+```
+
+```{r Testing the B20 model for spatial autocorrelation}
+#For this I made another df of coordinates from the b20 df just to be safe
+b20_df_coords <- st_as_sf(b20_final_df, coords = c("longitude", "latitude"), crs = 4326)
+b20_df_coords <- st_transform(b20_df_coords, 32610)
+
+b20_df_coords_extracted <- st_coordinates(b20_df_coords)
+b20_df_coords$easting <- b20_df_coords_extracted[,1]
+b20_df_coords$northing <- b20_df_coords_extracted[,2]
+b20_df_coords$easting_km <- b20_df_coords$easting / 1000
+b20_df_coords$northing_km <- b20_df_coords$northing / 1000
+
+b20_final_df <- b20_final_df%>%
+ left_join(b20_df_coords, by = c("site_code", "site_name", "protection_status",
+                                 "survey_date", "depth", "b20_biomass"))
+
+b20_mod_site_resids <- simulateResiduals(b20_mod_site)
+#testSpatialAutocorrelation(urch_mod_glmm_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- b20_final_df$site_code
+group_locations <- aggregate(b20_final_df[, c("easting_km", "northing_km")], list(site_group), mean)
+
+b20_mod_site_resids_2 <- recalculateResiduals(b20_mod_site_resids, group = site_group)
+testSpatialAutocorrelation(b20_mod_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+
+No spatial autocorrelation
+
+## Urchin Modelling
+
+### Looking at urchin distribution
+```{r}
+hist(overall_rls_data_final$Mesocentrotus_franciscanus)
+hist(protected_total_fish$Mesocentrotus_franciscanus)
+hist(unprotected_total_fish$Mesocentrotus_franciscanus)
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = Mesocentrotus_franciscanus))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### Urch mod glmmTMB with site
+
+```{r Urch mod glmmTMB with site}
+urch_mod_glmm_site <- glmmTMB(total_urchins ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = gaussian(link = "identity"))
+
+urch_mod_glmm_site
+
+urch_mod_glmm_site_resids <- simulateResiduals(urch_mod_glmm_site)
+plot(urch_mod_glmm_site_resids)
+
+hist(residuals(urch_mod_glmm_site))
+summary(urch_mod_glmm_site)
+```
+
+```{r Testing for spatial autocorrelation}
+urch_mod_glmm_site_resids <- simulateResiduals(urch_mod_glmm_site)
+#testSpatialAutocorrelation(urch_mod_glmm_site_resids, x = overall_rls_data_final$easting, y = overall_rls_data_final$northing)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting", "northing")], list(site_group), mean)
+
+urch_mod_glmm_site_resids_2 <- recalculateResiduals(urch_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(urch_mod_glmm_site_resids_2, x = group_locations$easting, y = group_locations$northing)
+```
+
+## Total decapod modelling
+
+
+### Looking at decapod data distribution
+
+```{r}
+hist(overall_rls_data_final$total_decapods)
+hist(protected_total_fish$total_decapods)
+hist(unprotected_total_fish$total_decapods)
+
+ggplot(overall_rls_data_final, aes(x = protection_status, y = total_decapods))+
+  geom_boxplot()+
+  theme.figure()
+```
+
+### Decapods glmm with site
+
+```{r Dec mod glmm}
+dec_mod_glmm_site <- glmmTMB(total_decapods ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom2(link = "log"))
+
+dec_mod_glmm_site
+
+dec_mod_glmm_site_resids <- simulateResiduals(dec_mod_glmm_site)
+plot(dec_mod_glmm_site_resids)
+testDispersion(dec_mod_glmm_site_resids)
+testOutliers(dec_mod_glmm_site_resids)
+
+summary(dec_mod_glmm_site)
+```
+
+
+```{r Testing for spatial autocorrelation for dec mod no RE}
+dec_mod_glmm_site_resids <- simulateResiduals(dec_mod_glmm_site)
+
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+dec_mod_glmm_site_resids_2 <- recalculateResiduals(dec_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(dec_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+
+No spatial autocorrelation
+
+## Red turban snail modelling
+
+```{r}
+hist(overall_rls_data_final$Pomaulax_gibberosus)
+hist(protected_total_fish$Pomaulax_gibberosus)
+hist(unprotected_total_fish$Pomaulax_gibberosus)
+```
+
+Effingham west has crazy outliers for the numbers of red turban snails so i am going to try removing this site from the analysis as it appears to be causing some issues.
+
+```{r Removing outliers for snail counts}
+snail_model_data <- overall_rls_data_final%>%
+  filter(site_code != "BMSC13")
+```
+
+### Snail glmm site no outliers
+
+This is the model with Effingham West removed.
+```{r Snail mod glmm site}
+snail_mod_glmm_site_no_outliers <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
+                         data = snail_model_data,
+                         family = glmmTMB::nbinom1(link = "log"))
+
+snail_mod_glmm_site_no_outliers
+
+snail_mod_glmm_site_no_outliers_resids <- simulateResiduals(snail_mod_glmm_site_no_outliers)
+plot(snail_mod_glmm_site_no_outliers_resids)
+testDispersion(snail_mod_glmm_site_no_outliers_resids)
+testOutliers(snail_mod_glmm_site_no_outliers_resids)
+
+
+summary(snail_mod_glmm_site_no_outliers)
+```
+
+```{r Testing for spatial autocorrelation for snail mod no outliers}
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_site_no_outliers_resids_2 <- recalculateResiduals(snail_mod_glmm_site_no_outliers_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_site_no_outliers_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation.
+
+### Snail glmm site with outliers
+
+To ensure the results were consistent with and without the outliers here is the model with Effingham West included.
+
+```{r Snail mod glmm site}
+snail_mod_glmm_site <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom2(link = "log"))
+
+snail_mod_glmm_site
+
+snail_mod_glmm_site_resids <- simulateResiduals(snail_mod_glmm_site)
+plot(snail_mod_glmm_site_resids)
+testDispersion(snail_mod_glmm_site_resids)
+testOutliers(snail_mod_glmm_site_resids)
+
+
+summary(snail_mod_glmm_site)
+```
+
+
+```{r Testing for spatial autocorrelation for snail mod no RE}
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+snail_mod_glmm_site_resids_2 <- recalculateResiduals(snail_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(snail_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+No spatial autocorrelation
+
+## Sunflower sea star (Pycnopodia helianthoides) modelling
+
+```{r pycno mod glmm site}
+pycno_mod_glmm_site <- glmmTMB(Pycnopodia_helianthoides ~ protection_status + (1|site_code),
+                         data = overall_rls_data_final,
+                         family = glmmTMB::nbinom2(link = "log"))
+
+pycno_mod_glmm_site
+
+pycno_mod_glmm_site_resids <- simulateResiduals(pycno_mod_glmm_site)
+plot(pycno_mod_glmm_site_resids)
+testDispersion(pycno_mod_glmm_site_resids)
+testOutliers(pycno_mod_glmm_site_resids)
+
+summary(pycno_mod_glmm_site)
+```
+
+```{r Testing for spatial autocorrelation for pycno mod}
+site_group <- overall_rls_data_final$site_code
+group_locations <- aggregate(overall_rls_data_final[, c("easting_km", "northing_km")], list(site_group), mean)
+
+pycno_mod_glmm_site_resids_2 <- recalculateResiduals(pycno_mod_glmm_site_resids, group = site_group)
+testSpatialAutocorrelation(pycno_mod_glmm_site_resids_2, x = group_locations$easting_km, y = group_locations$northing_km)
+```
+
+No spatial autocorrelation
+
+# Making plots of the models
+
+To make plots for each of the models I first predicted marginal means and 95% confidence intervals for each model and then plotted those on boxplots between protection status.
+
+## Fish abundance model
+
+### Predicting means with CI
+
+```{r Predicting fish abundance mean etc}
+fish_ab_sum_stats <- emmeans::emmeans(fish_ab_spatiotemp, ~ protection_status, type = "response")
+
+confint(fish_ab_sum_stats)
+fish_ab_sum_stats<- as.data.frame(confint(fish_ab_sum_stats))
+#must use emmeans because ggpredict does not work with sdmTMB
+```
+
+### Making plot with the predicted means
+
+```{r Plotting fish abundance with predictions}
+(fish_ab_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = total_fish))+
+  #geom_jitter(data = fish_sp_rich_df, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+   geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = fish_ab_sum_stats, aes(x = protection_status, y = response),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = fish_ab_sum_stats, aes(x = protection_status, y = response,
+                                                ymin = lower.CL, ymax = upper.CL),
+               colour = "black", width = 0.2, linewidth = 1.2)+
+  #scale_y_continuous(breaks = c(2, 4, 6, 8, 10, 12), limits = c(2, 12))+
+  labs(x = "Protection Status", y = "Total fish\ncounts")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
+## Fish species richness
+
+### Predicting means with CI
+
+```{r Predicting fish species richness mean etc}
+fish_sp_rich_sum_stats <- ggpredict(fish_sp_rich_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                fish_sp_rich = predicted) %>% 
+  as.data.frame()
+
+#emmeans::emmeans(fish_sp_rich_glmm_site, ~protection_status, type = "response")
+```
+
+### Making plot with predicted means
+
+```{r Plotting fish sp richness with predictions}
+(fish_sp_rich_mod_plot <- ggplot(fish_sp_rich_df, aes(x = protection_status, y = fish_sp_rich))+
+  #geom_jitter(data = fish_sp_rich_df, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+   geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = fish_sp_rich_sum_stats, aes(x = protection_status, y = fish_sp_rich),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = fish_sp_rich_sum_stats, aes(x = protection_status, y = fish_sp_rich,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  scale_y_continuous(breaks = c(2, 4, 6, 8, 10, 12), limits = c(2, 12))+
+  labs(x = "Protection Status", y = "Fish species\nrichness")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
+## B20
+
+### Predicting means with CI
+
+```{r}
+b20_sum_stats <- ggpredict(b20_mod_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                b20_biomass = predicted) %>% 
+  as.data.frame()
+```
+
+### Making plot with predicted means
+
+```{r}
+(b20_mod_plot <- ggplot(b20_final_df, aes(x = protection_status, y = b20_biomass))+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = b20_sum_stats, aes(x = protection_status, y = b20_biomass),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = b20_sum_stats, aes(x = protection_status, y = b20_biomass,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "B20")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
+## Urchin abundance
+
+### Predicting means with CI
+
+```{r Predicting urchin abundance mean}
+urchin_ab_sum_stats <- ggpredict(urch_mod_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                urchin_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+### Making plot with predicted means
+
+```{r Plotting urchin abundance with predictions}
+(urch_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = total_urchins))+
+ # geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = urchin_ab_sum_stats, aes(x = protection_status, y = urchin_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = urchin_ab_sum_stats, aes(x = protection_status, y = urchin_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Sea urchin\ncounts")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+         axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()))
+```
+
+## Total decapod abundance
+
+### Predicting means with CI
+
+```{r Predicting decapod abundance mean}
+total_decapod_sum_stats <- ggpredict(dec_mod_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                dec_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+```{r Plotting decapod abundance with predictions}
+(decapod_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = total_decapods))+
+  #geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = total_decapod_sum_stats, aes(x = protection_status, y = dec_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = total_decapod_sum_stats, aes(x = protection_status, y = dec_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Decapod counts")+
+ #  scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        #axis.ticks.x = element_blank()
+       ))
+```
+
+## Snail abundance
+
+### Predicting means with CI
+
+```{r Predicting snail abundance mean}
+snail_ab_sum_stats <- ggpredict(snail_mod_glmm_site_no_outliers,
+                               terms = c("protection_status"),
+                              type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                snail_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+```{r Plotting pycno abundance with predictions}
+(snail_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = Pomaulax_gibberosus))+
+ # geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey", outliers = FALSE)+
+  geom_point(data = snail_ab_sum_stats, aes(x = protection_status, y = snail_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = snail_ab_sum_stats, aes(x = protection_status, y = snail_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Red turban\nsnail counts")+
+  # scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none",
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        #axis.ticks.x = element_blank()
+       ))
+```
+
+## Pycno abundance
+
+### Predicting means with CI
+
+```{r Predicting pycno abundance mean}
+pycno_sum_stats <- ggpredict(pycno_mod_glmm_site,
+                               terms = c("protection_status"),
+                               type = "fixed",
+                               bias_correction = TRUE) %>%
+  dplyr::rename(protection_status = x,
+                pycno_abundance = predicted) %>% 
+  as.data.frame()
+```
+
+```{r Plotting pycno abundance with predictions}
+(pycno_mod_plot <- ggplot(overall_rls_data_final, aes(x = protection_status, y = Pycnopodia_helianthoides))+
+ # geom_jitter(data = overall_rls_data_final, aes(fill = protection_status),width = 0.1, height = 0, alpha = 0.4, shape = 21)+
+  geom_boxplot(alpha = 0.6, width = 0.5, colour = "grey")+
+  geom_point(data = pycno_sum_stats, aes(x = protection_status, y = pycno_abundance),
+                                             size = 3, colour = "black")+
+  geom_errorbar(data = pycno_sum_stats, aes(x = protection_status, y = pycno_abundance,
+                                                ymin = conf.low, ymax = conf.high),
+                colour = "black", width = 0.2, linewidth = 1.2)+
+  labs(x = "Protection Status", y = "Sunflower sea\nstar counts")+
+  # scale_fill_manual(values = c("protected" = "black", "unprotected"=  "white"))+
+  theme.figure()+
+  theme(legend.position = "none"))
+```
+
+## Combining the plots into a multipanel plot
+
+```{r}
+(ecological_test_plot <- (fish_sp_rich_mod_plot + 
+                            fish_ab_mod_plot + 
+                            b20_mod_plot +
+                            urch_mod_plot + 
+                              snail_mod_plot + 
+                                decapod_mod_plot +
+                            pycno_mod_plot) +
+   plot_layout(ncol = 3))
+```
+
+## Saving as a pdf for export
+
+I further refined the plot in inkscape and added some icons for the different species.
+
+```{r Saving the rec boat counts boxplot figure}
+ggsave("ecological_test_plot.pdf", plot = ecological_test_plot,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 150, units = "mm")
 ```
