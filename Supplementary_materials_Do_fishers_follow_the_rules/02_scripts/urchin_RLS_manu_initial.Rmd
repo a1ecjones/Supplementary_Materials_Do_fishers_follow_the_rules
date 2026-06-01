@@ -672,8 +672,8 @@ theme.figure <- function (){
   theme(panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     #axis.line = element_line(colour = "black"),
-    axis.title = element_text(size = 16, face = "bold"),
-    axis.text = element_text(size = 14, face = "plain"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12, face = "plain"),
     legend.text = element_text(size = 12, face = "plain"),
     legend.title = element_text(size = 14, face = "bold")) 
 }
@@ -740,7 +740,7 @@ rec_boats_fishing2023 <- DFO_data_raw_2023%>%
   filter(!Date %in% c("2023-06-23", "2023-07-16", "2023-07-31", "2023-08-06", "2023-08-28",
                       "2023-08-29", "2023-09-09", "2023-09-15"))%>%
   #Selecting only the rows where recreational boats were fishing
-  filter(rec_boats_fishing != 0)%>%
+  #filter(rec_boats_fishing != 0)%>%
   #selecting all of the columns that are needed for further analysis
     select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
@@ -750,6 +750,18 @@ rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.765
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
 
 #48.996722
+
+#These lines used to get the total numbers of boats including the amount not fishing
+rec_boats_fishing2023_subset_clean <- rec_boats_fishing2023_subset[!(rec_boats_fishing2023_subset$rec_boats_fishing == 0 &
+                                                                 rec_boats_fishing2023_subset$rec_boats_running == 0),]
+
+#Used to make the points for the analyses of the fishing boats below
+rec_boats_only_fishing2023_subset_clean <- rec_boats_fishing2023_subset[!(rec_boats_fishing2023_subset$rec_boats_fishing == 0),]
+sum(rec_boats_only_fishing2023_subset_clean$rec_boats_fishing)
+
+#Making a df for plotting with only rec boats fishing
+rec_boats_fishing_only_2023 <- rec_boats_fishing2023_subset%>%
+  filter(rec_boats_fishing != 0)
 ```
 
 
@@ -780,7 +792,7 @@ rec_boats_fishing2022 <- DFO_data_raw_2022%>%
                   "whale_watching", "orcas", "whales"), as.numeric))%>%
    ##This code will remove the dates of the flights that had fog
   filter(!Date %in% c("2022-06-18", "2022-07-31", "2022-08-24", "2022-06-04"))%>%
-    filter(rec_boats_fishing != 0)%>%
+   # filter(rec_boats_fishing != 0)%>%
   #selecting all of the columns that are needed for further analysis
     select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
@@ -790,6 +802,19 @@ rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.765
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
 
 #48.996722
+
+#filtering to only include observations where there is at least one between the two types of boats. I.E. removing rows where both are 0.
+rec_boats_fishing2022_subset_clean <- rec_boats_fishing2022_subset[!(rec_boats_fishing2022_subset$rec_boats_fishing == 0 &
+                                                                 rec_boats_fishing2022_subset$rec_boats_running == 0),]
+
+
+#Used to make the points for the analyses of the fishing boats below
+rec_boats_only_fishing2022_subset_clean <- rec_boats_fishing2022_subset[!(rec_boats_fishing2022_subset$rec_boats_fishing == 0),]
+sum(rec_boats_only_fishing2022_subset_clean$rec_boats_fishing)
+
+#Making a df for plotting with only rec boats fishing
+rec_boats_fishing_only_2022 <- rec_boats_fishing2022_subset%>%
+  filter(rec_boats_fishing != 0)
 ```
 
 
@@ -820,7 +845,7 @@ rec_boats_fishing2021 <- DFO_data_raw_2021%>%
                   "whale_watching", "orcas", "whales"), as.numeric))%>%
    ##This code will remove the dates of the flights that had fog
   filter(!Date %in% c("2021-07-31", "2021-07-19", "2021-07-20", "2021-07-24"))%>%
-   filter(rec_boats_fishing != 0)%>%
+ #  filter(rec_boats_fishing != 0)%>%
   select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
 
@@ -829,12 +854,30 @@ rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.765
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
 
 #48.996722
+
+
+rec_boats_fishing2021_subset_clean <- rec_boats_fishing2021_subset[!(rec_boats_fishing2021_subset$rec_boats_fishing == 0 
+                                                            &rec_boats_fishing2021_subset$rec_boats_running == 0),]
+
+
+#Used to make the points for the analyses of the fishing boats below
+rec_boats_only_fishing2021_subset_clean <- rec_boats_fishing2021_subset[!(rec_boats_fishing2021_subset$rec_boats_fishing == 0),]
+sum(rec_boats_only_fishing2021_subset_clean$rec_boats_fishing)
+
+
+#Making a df for plotting with only rec boats fishing
+rec_boats_fishing_only_2021 <- rec_boats_fishing2021_subset%>%
+  filter(rec_boats_fishing != 0)
 ```
 
 
 #### Combining the three years of data into one data frame
 ```{r Combining the three years of data by row}
-rec_boats_fishing_total <- rbind(rec_boats_fishing2021_subset, rec_boats_fishing2022_subset, rec_boats_fishing2023_subset)
+rec_boats_fishing_total <- rbind(rec_boats_only_fishing2021_subset_clean, rec_boats_only_fishing2022_subset_clean, rec_boats_only_fishing2023_subset_clean)
+
+sum(rec_boats_fishing2023_subset_clean$rec_boats_running)
+sum(rec_boats_fishing2022_subset$rec_boats_fishing)
+sum(rec_boats_fishing_total$rec_boats_running[rec_boats_fishing_total$Year == 2021])
 ```
 
 ### Adding the recreational fishing boat data to the data frame
@@ -1004,6 +1047,26 @@ urch_dens_data <- overall_rls_data_final%>%
   select(site_code, site_name, survey_date, depth, protection_status, kelp, kelp_pa, Mesocentrotus_franciscanus, Pomaulax_gibberosus, total_urchins)
 ```
 
+# Looking at decapods between protected areas
+
+```{r}
+dec_data <- overall_rls_data_final%>%
+  filter(protection_status == "protected")%>%
+  mutate(protected_area = case_when(
+    site_code %in% c("BMSC6", "BMSC7", "BMSC8") ~ "brer",
+    site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18") ~ "bgrca",
+    site_code %in% c("BMSC26") ~ "nbfca"
+  ))
+
+ggplot(dec_data, aes(x = protected_area, y = Cancer_productus))+
+  geom_boxplot()
+
+
+mean(dec_data$total_decapods[dec_data$protected_area == "brer"])
+mean(dec_data$total_decapods[dec_data$protected_area == "bgrca"])
+mean(dec_data$total_decapods[dec_data$protected_area == "nbfca"])
+```
+
 
 # Making some plots
 
@@ -1102,7 +1165,7 @@ baeria_rocks_er <- st_read(here("./01_raw_data/baeria_rocks.kml"))
 
 
 ```{r Loading in the Folger Passage RCA}
-folger_pass_RCA <- st_read(here("./01_raw_data/folger_passage_RCA.kml"))
+#folger_pass_RCA <- st_read(here("./01_raw_data/folger_passage_RCA.kml"))
 ```
 
 ### Loading in the flight track for the DFO surveys
@@ -1128,6 +1191,72 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
   mutate(longitude = if_else(site_code == "BMSC9", -125.1490, longitude))%>%
   mutate(longitude = if_else(site_code == "BMSC7", -125.16, longitude))
 ```
+
+
+#### Bonus Figure of Canada
+
+```{r Making the canada map}
+#library(rnaturalearthdata)
+#library(rnaturalearth)
+
+
+## LARGE CANADA MAP
+
+## Set the map theme
+#maptheme_blank <-  theme_bw()+
+ # theme(axis.title.y = element_blank(), 
+  #      axis.title.x = element_blank(),
+   #     panel.grid.major = element_blank(), 
+    #    panel.grid.minor = element_blank(),
+     #   axis.text.x = element_blank(),
+      #  axis.text.y = element_blank(),
+       # axis.ticks = element_blank())
+
+
+## Load in the world Data
+#world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Create Large Map of Canada
+#ggplot() +
+ # xlab("") + 
+ # ylab("") +
+#  geom_sf(data = world)+
+ # coord_sf(xlim = c(-165, -55), ylim = c(40, 80))+ # define the plot limits
+  #maptheme_blank
+#geom_point(aes(y = 52, x = -130), colour = "red", cex = 10, shape = 0, stroke = 2) + maptheme_blank
+
+```
+
+#### Bonus figure of Dodger channel
+```{r, eval=FALSE}
+#(overall_site_map <- ggplot()+
+ #   geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  #     coord_sf(xlim = c(long_min + 0.03, long_max - 0.035),
+   #        ylim = c(lat_min + 0.01, lat_max - 0.04))+
+  #labs(x = "Longitude", y = "Latitude") +
+  #theme.figure() +
+  #scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+ # scale_y_continuous(breaks = c(48.80, 48.85, 48.90, 48.95, 49.00))+
+  #Adds in an arrow indicating north
+   #annotation_north_arrow(
+    #location = "tl",
+    #which_north = "true",
+    #style = north_arrow_fancy_orienteering
+  #) +
+   #adds in a scale bar
+  #annotation_scale(location = "br", text_cex = 1.3)+
+   #guides(
+  #fill = guide_legend(override.aes = list(shape = 21)),
+  #shape = guide_legend(override.aes = list(fill = "white"))
+#)+
+ #   theme(legend.position = "inside",
+  #    legend.position.inside = c(0.84, 0.2),
+   #      axis.text.y = element_text(angle = 45),
+    #  legend.text = element_text(size = 10),
+     # legend.title = element_text(size = 12),
+      #legend.margin = margin(0.3, 0.3, 0.3, 0.3)))
+```
+
 
 
 ## Figure 1: Overall site map
@@ -1178,7 +1307,7 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
  # scale_y_continuous(breaks = c(48.80, 48.85, 48.90, 48.95, 49.00))+
   #Adds in an arrow indicating north
    annotation_north_arrow(
-    location = "tr",
+    location = "tl",
     which_north = "true",
     style = north_arrow_fancy_orienteering
   ) +
@@ -1191,11 +1320,12 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
     theme(legend.position = "inside",
       legend.position.inside = c(0.84, 0.2),
          axis.text.y = element_text(angle = 45),
-      legend.text = element_text(size = 12),
-      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 10),
+      legend.title = element_text(size = 12),
       legend.margin = margin(0.3, 0.3, 0.3, 0.3))+
   geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange")+
-  geom_point(aes(x = -125.082355, y = 48.966445), shape = 24, size = 5, fill = "#73D055FF"))
+  geom_point(aes(x = -125.082355, y = 48.966445), shape = 24, size = 5, fill = "#73D055FF")+
+  geom_point(aes(x = -125.047012, y = 48.880314), shape = 23, size = 5, fill = "orange"))
 ```
 
 
@@ -1428,10 +1558,14 @@ unique_site_df$protection_status <- factor(unique_site_df$protection_status,
 
 unique_site_df$protection_status <- recode(unique_site_df$protection_status,
                                            protected = "P", unprotected = "UP")
+
 ```
 
 
 ```{r Calculating the mean mean number of boats}
+
+#These are not accurate because there are multiple rows for each site and some have more or less
+
 mean_mean_boats_protected <- mean(overall_rls_data_final$mean_rec_boat_counts_1km[overall_rls_data_final$protection_status == "protected"])
 
 mean_mean_boats_unprotected <- mean(overall_rls_data_final$mean_rec_boat_counts_1km[overall_rls_data_final$protection_status == "unprotected"])
@@ -1443,6 +1577,8 @@ max(overall_rls_data_final$mean_rec_boat_counts_2km[overall_rls_data_final$prote
 unproc_boats_df <- overall_rls_data_final%>%
   filter(protection_status == "unprotected")%>%
   select(site_code, site_name, mean_rec_boat_counts_1km, mean_rec_boat_counts_1.5km, mean_rec_boat_counts_2km)
+
+mean(unproc_boats_df$mean_rec_boat_counts_1km)
 ```
 
 
@@ -1515,20 +1651,20 @@ For this plot we used 2023 and 1.5 km radii as examples of the data we saw for t
 ```{r total rec boats within 1.5 km, fig.cap=Figure 3. Example of the raw data from DFO flyover surveys (June 1–September 30, 2023) indicating the locations of recreational boats fishing (black dots) with 1.5 km radii (red-filled circles) around each Reef Life Survey site (open black dots) in Barkley Sound, BC, Canada. Subtidal surveys were conducted at each site in April and May of 2024. The DFO surveys sometimes grouped boats that were close together as one point, so some points indicate multiple boats, but this has been omitted for ease of viewing. The flight path taken by DFO surveyors is shown (dashed blue line) with arrows showing the direction of flight. DFO surveys were completed in the summers of 2021-23. The mean numbers of recreational boats fishing within 1.0, 1.5, and 2.0 km radii per year were calculated to compare fishing activity between protected and unprotected sites.}
 (total_rec_boats_map_2023_test <- ggplot()+
     geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
-   #This plots the DFO plane flight path
-  # geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
-  geom_point(data = rec_boats_fishing2023, 
+  geom_point(data = rec_boats_fishing_only_2023, 
              mapping = aes(x = Longitude, y = Latitude),
              size = 0.8, fill = "#070707")+
       geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
    geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
    geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+    #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
    #This plots the 1.5km radii around each RLS site
-  #  geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.6)+
    #this plots the RLS sites
- #   geom_point(overall_rls_data_final, 
-   #           mapping = aes(x = longitude, y = latitude),
-   #           shape = 21, size = 3, colour = "black")+
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
     coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
            ylim = c(lat_min + 0.01, lat_max - 0.03)) +
   labs(x = "Longitude", y = "Latitude") +
@@ -1548,6 +1684,94 @@ A legend was added and the flight path line styling was edited using inkscape.
 ```{r Saving the rec boats plot with dfo flight track}
 ggsave("total_rec_boat_map_2023_with_protected_areas.pdf", plot = total_rec_boats_map_2023_test,
        path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
+
+
+### 2021
+
+```{r total rec boats within 1.5 km}
+(total_rec_boats_map_2021_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_point(data = rec_boats_fishing_only_2021, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+      geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+    #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.6)+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2021_with_protected_areas.pdf", plot = total_rec_boats_map_2021_test,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
+### 2022
+
+```{r total rec boats within 1.5 km}
+(total_rec_boats_map_2022_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_point(data = rec_boats_fishing_only_2022, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+      geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+    #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.6)+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2022_with_protected_areas.pdf", plot = total_rec_boats_map_2022_test,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
+
+# Checking on the Effingham West Outlier site
+
+```{r}
+#Calculating the average value for each site
+snail_site_averages <- overall_rls_data_final%>%
+  group_by(site_code, site_name)%>%
+  summarise(average_snails = mean(Pomaulax_gibberosus))
+
+#Identifying the values outside 1.5 x the IQR
+boxplot.stats(snail_site_averages$average_snails)$out
 ```
 
 
@@ -2244,9 +2468,13 @@ rec_boats_within_numukamis_final <- rec_boats_within_numukamis%>%
 
 ```{r Summing the total number of boats in protected areas and outside}
 #These lines add up all of the boats spotted within each protected area
-total_boats_broken_group_RCA <- sum(rec_boats_within_broken_group_RCA$rec_boats_fishing)
-total_boats_baeria_rocks_er <- sum(rec_boats_within_baeria_rocks_er$rec_boats_fishing)
-total_boats_numukamis <- sum(rec_boats_within_numukamis_final$rec_boats_fishing)
+total_boats_broken_group_RCA <- (sum(rec_boats_within_broken_group_RCA$rec_boats_fishing)+
+                                   sum(rec_boats_within_broken_group_RCA$rec_boats_running))
+
+total_boats_baeria_rocks_er <- (sum(rec_boats_within_baeria_rocks_er$rec_boats_fishing) + sum(rec_boats_within_baeria_rocks_er$rec_boats_running))
+
+total_boats_numukamis <- (sum(rec_boats_within_numukamis_final$rec_boats_fishing) + sum(rec_boats_within_numukamis_final$rec_boats_running))
+
 #total_boats_folger_pass_RCA <- sum(rec_boats_within_folger_pass_RCA$rec_boats_fishing)
 
 #This adds up all of the boats for a total number spotted across all protected
@@ -2256,8 +2484,9 @@ total_boats_in_protected_areas <- total_boats_broken_group_RCA + total_boats_bae
 
 #This adds up all of the rec boats fishing that were spotted within Barkley 
 #Sound.
-total_boats_spotted_barkley <- sum(rec_boats_fishing_total$rec_boats_fishing)
-total_boats_spotted_barkley_2021 <- sum(rec_boats_fishing2021_subset$rec_boats_fishing)
+total_boats_spotted_barkley <- (sum(rec_boats_fishing_total$rec_boats_fishing) + 
+                                  sum(rec_boats_fishing_total$rec_boats_running))
+total_boats_spotted_barkley_2021 <- sum(rec_boats_fishing2021_subset_clean$rec_boats_fishing)
 total_boats_spotted_barkley_2022 <- sum(rec_boats_fishing2022_subset$rec_boats_fishing)
 total_boats_spotted_barkley_2023 <- sum(rec_boats_fishing2023_subset$rec_boats_fishing)
 
@@ -2734,6 +2963,8 @@ Equal variance for 1km, but not for 1.5km or 2km.
 #Making data frame with only sites that are protected
 rec_boat_protected <- subset(unique_site_df, protection_status == "P")
 
+mean(rec_boat_protected$mean_rec_boat_counts_1km)
+
 #Using shapiro wilks test to see if the mean rec boat counts are normal
 shapiro.test(rec_boat_protected$mean_rec_boat_counts_1km)
 #using histogram to look at normality visually
@@ -2753,6 +2984,8 @@ Only the 1.5 km boat counts are normal
 
 #Making data frame with only sites that are non-protected
 rec_boat_non_protected <- subset(unique_site_df, protection_status == "UP")
+
+mean(rec_boat_non_protected$mean_rec_boat_counts_1km)
 
 shapiro.test(rec_boat_non_protected$mean_rec_boat_counts_1km)
 hist(rec_boat_non_protected$mean_rec_boat_counts_1km)

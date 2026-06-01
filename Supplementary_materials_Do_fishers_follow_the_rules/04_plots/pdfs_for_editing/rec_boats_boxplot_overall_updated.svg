@@ -896,8 +896,8 @@
      inkscape:zoom="1.0980952"
      inkscape:cx="346.96445"
      inkscape:cy="116.56549"
-     inkscape:window-width="1920"
-     inkscape:window-height="1027"
+     inkscape:window-width="1440"
+     inkscape:window-height="791"
      inkscape:window-x="0"
      inkscape:window-y="25"
      inkscape:window-maximized="0"
@@ -922,7 +922,7 @@
        style="fill:#333333;fill-opacity:0.6;fill-rule:nonzero;stroke:#333333;stroke-width:0.71;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:none;stroke-opacity:0.6"
        transform="matrix(1.3333333,0,0,-1.3333333,0,301.33333)"
        clip-path="url(#clipPath13)"
-       inkscape:export-filename="../manuscript_figures/rec_boat_counts_overall_box_updated.png"
+       inkscape:export-filename="../manuscript_figures/rec_boat_counts_overall_box_updated_new_p_vals.png"
        inkscape:export-xdpi="300"
        inkscape:export-ydpi="300" />
     <path
@@ -1381,7 +1381,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect6-3);display:inline;fill:#4d4d4d;fill-opacity:1"><tspan
          x="109.95117"
          y="660.63603"
-         id="tspan2">C)</tspan></text>
+         id="tspan9">C)</tspan></text>
     <text
        xml:space="preserve"
        transform="translate(181.67252,-655.8821)"
@@ -1389,7 +1389,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect6-1);display:inline;fill:#4d4d4d;fill-opacity:1"><tspan
          x="109.95117"
          y="660.63603"
-         id="tspan3">B)</tspan></text>
+         id="tspan10">B)</tspan></text>
     <text
        xml:space="preserve"
        transform="translate(-19.984612,-655.8821)"
@@ -1397,7 +1397,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect6);display:inline;fill:#4d4d4d;fill-opacity:1"><tspan
          x="109.95117"
          y="660.63603"
-         id="tspan4">A)</tspan></text>
+         id="tspan11">A)</tspan></text>
     <rect
        style="fill:#ffffff;fill-opacity:1;stroke:#333333;stroke-width:1.6252;stroke-dasharray:none;stroke-opacity:1;paint-order:stroke fill markers"
        id="rect11"
@@ -1429,7 +1429,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect6-3-2-60);display:inline;fill:#4d4d4d;fill-opacity:1"><tspan
          x="109.95117"
          y="660.63603"
-         id="tspan5">2 km</tspan></text>
+         id="tspan12">2 km</tspan></text>
     <text
        xml:space="preserve"
        transform="translate(186.98109,-626.62536)"
@@ -1437,7 +1437,7 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect6-3-2-0-1);display:inline;fill:#4d4d4d;fill-opacity:1"><tspan
          x="109.95117"
          y="660.63603"
-         id="tspan6">1.5 km</tspan></text>
+         id="tspan13">1.5 km</tspan></text>
     <text
        xml:space="preserve"
        transform="translate(-11.714121,-626.4613)"
@@ -1445,19 +1445,19 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect6-3-2-6);display:inline;fill:#4d4d4d;fill-opacity:1;paint-order:stroke fill markers"><tspan
          x="109.95117"
          y="660.63603"
-         id="tspan8"><tspan
+         id="tspan15"><tspan
            style="font-size:18.6667px"
-           id="tspan7">1 km</tspan></tspan></text>
+           id="tspan14">1 km</tspan></tspan></text>
     <text
        id="text261-0"
        xml:space="preserve"
-       x="144.33812"
+       x="148.65051"
        y="119.62568"
        style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:46.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:1.33333"><tspan
          id="tspan261-2"
          style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:46.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:1.33333"
-         x="144.33812"
-         y="119.62568">**</tspan></text>
+         x="148.65051"
+         y="119.62568">***</tspan></text>
     <text
        id="text261-0-1"
        xml:space="preserve"
@@ -1471,12 +1471,12 @@
     <text
        id="text261-0-2"
        xml:space="preserve"
-       x="565.05023"
+       x="550.55719"
        y="119.62568"
        style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:46.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:1.33333"><tspan
          id="tspan261-2-3"
          style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:46.6667px;font-family:Helvetica;-inkscape-font-specification:'Helvetica, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;fill:#000000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:1.33333"
-         x="565.05023"
-         y="119.62568">**</tspan></text>
+         x="550.55719"
+         y="119.62568">***</tspan></text>
   </g>
 </svg>

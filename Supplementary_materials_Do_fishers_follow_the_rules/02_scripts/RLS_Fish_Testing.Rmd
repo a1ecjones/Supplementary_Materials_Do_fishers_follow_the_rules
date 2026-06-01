@@ -1,0 +1,90 @@
+---
+title: "RLS Fish Testing"
+author: "Alec Jones"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(ggpmisc)
+```
+
+```{r Loading in the mobile fish data, echo=FALSE}
+mobile_fish_data_raw <- read_csv(here("./01_raw_data/cleaned_Global_reef_fish_abundance_and_biomass.csv"))
+```
+```{r}
+mobile_fish_data_clean <- mobile_fish_data_raw%>%
+  select(c(site_code, site_name, latitude, longitude, survey_date, depth, visibility, 
+           hour, method, block, phylum, class, order, family, species_name, reporting_name,
+           size_class, total, biomass))%>%
+  arrange(site_code)%>%
+   filter(site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC15",
+                          "BMSC16", "BMSC17", "BMSC18", "BMSC19", "BMSC2", "BMSC20", "BMSC21",
+                          "BMSC22", "BMSC23", "BMSC24", "BMSC25", "BMSC26", "BMSC27", "BMSC3", "BMSC4", "BMSC5", "BMSC6", "BMSC7", "BMSC8", "BMSC9"))%>%
+#Adding the protection status to the dataset
+mutate(protection_status = case_when(
+  site_code %in% c("BMSC1", "BMSC10", "BMSC11", "BMSC12", "BMSC13", "BMSC14", "BMSC19", 
+                   "BMSC2", "BMSC20", "BMSC21", "BMSC22", "BMSC23", "BMSC24", "BMSC25",
+                   "BMSC27", "BMSC3", "BMSC31", "BMSC32", "BMSC33", "BMSC4", "BMSC5", "BMSC9") ~ "unprotected",
+  site_code %in% c("BMSC15", "BMSC16", "BMSC17", "BMSC18", "BMSC26", "BMSC6", "BMSC7", "BMSC8") ~ "protected"
+))%>%
+    mutate(kelp = case_when(
+    site_code %in% c("BMSC15", "BMSC26") ~ "Forest",
+    site_code %in% c("BMSC10") ~ "Prior forest",
+    site_code %in% c("BMSC22", "BMSC4", "BMSC17") ~ "Prior understory",
+    site_code %in% c("BMSC1") ~ "Understory",
+   #This makes all the remaining ones equal to barren
+     TRUE ~ "Barren"
+  ))%>%
+  filter(phylum == "Chordata")%>%
+  filter(class != "Mammalia")%>%
+ # filter(family == "Sebastidae")%>%
+  mutate(biomass = ifelse(is.na(biomass), 0, biomass))
+
+  
+  
+mobile_fish_data_clean$year <- format(mobile_fish_data_clean$survey_date, "%Y")
+mobile_fish_data_clean$year <- as.numeric(mobile_fish_data_clean$year)
+```
+
+```{r Calculating transect biomass}
+tran_biomass <- mobile_fish_data_clean%>%
+  group_by(site_code, site_name, protection_status, latitude, longitude, survey_date, depth, visibility, year)%>%
+  summarise(total_biomass = sum(biomass/1000))
+```
+
+# Plotting biomass
+
+```{r Setting theme for subsequent plots}
+theme.figure <- theme_bw(base_size = 12) +
+  theme(panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    #axis.line = element_line(colour = "black"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12, face = "plain"),
+    legend.text = element_text(size = 12, face = "plain"),
+    legend.title = element_text(size = 14, face = "bold"))
+
+theme_set(theme.figure)
+```
+
+
+```{r}
+ggplot(tran_biomass, aes(x = visibility, y = total_biomass))+
+  geom_jitter()
+
+```
+
+
+```{r Plotting fish biomass vs vis}
+ggplot(tran_biomass, aes(x = visibility, y = total_biomass))+
+  geom_jitter()+
+ # geom_smooth(method = "lm")+
+  facet_wrap(~site_code)
+
+```
+
