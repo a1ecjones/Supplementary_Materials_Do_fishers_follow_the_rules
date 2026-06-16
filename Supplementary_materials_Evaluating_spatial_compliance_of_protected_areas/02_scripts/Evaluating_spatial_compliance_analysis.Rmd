@@ -1,6 +1,5 @@
 ---
-title: Do fishers follow the rules? Evaluating recreational fishing compliance of
-  protected areas and downstream ecological responses
+title: Evaluating spatial compliance of protected areas by recreational fishers and resulting ecological responses of temperate rocky reefs
 author: "Alec Jones"
 date: "2025-12-03"
 output: html_document
@@ -36,7 +35,7 @@ conflict_prefer("recode", "dplyr")
 ```
 
 
-This document contains the code necessary to run the analyses performed in "Do fishers follow the rules? Evaluating recreational fishing compliance of protected areas and downstream ecological responses."
+This document contains the code necessary to run the analyses performed in "Evaluating spatial compliance of protected areas by recreational fishers and resulting ecological responses of temperate rocky reefs"
 
 # Loading in the data
 
@@ -518,7 +517,7 @@ rec_boats_fishing2023 <- DFO_data_raw_2023%>%
   filter(!Date %in% c("2023-06-23", "2023-07-16", "2023-07-31", "2023-08-06", "2023-08-28",
                       "2023-08-29", "2023-09-09", "2023-09-15"))%>%
   #Selecting only the rows where recreational boats were fishing
-  filter(rec_boats_fishing != 0)%>%
+ # filter(rec_boats_fishing != 0)%>%
   #selecting all of the columns that are needed for further analysis
     select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
@@ -526,6 +525,18 @@ rec_boats_fishing2023 <- DFO_data_raw_2023%>%
 #Subsetting the dataframe to have points from only the region of interest
 rec_boats_fishing2023_subset <- subset(rec_boats_fishing2023, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
+
+#These lines used to get the total numbers of boats including the amount not fishing
+rec_boats_fishing2023_subset_clean <- rec_boats_fishing2023_subset[!(rec_boats_fishing2023_subset$rec_boats_fishing == 0 &
+                                                                 rec_boats_fishing2023_subset$rec_boats_running == 0),]
+
+#Used to make the points for the analyses of the fishing boats below
+rec_boats_only_fishing2023_subset_clean <- rec_boats_fishing2023_subset[!(rec_boats_fishing2023_subset$rec_boats_fishing == 0),]
+sum(rec_boats_only_fishing2023_subset_clean$rec_boats_fishing)
+
+#Making a df for plotting with only rec boats fishing
+rec_boats_fishing_only_2023 <- rec_boats_fishing2023_subset%>%
+  filter(rec_boats_fishing != 0)
 ```
 
 
@@ -556,7 +567,7 @@ rec_boats_fishing2022 <- DFO_data_raw_2022%>%
                   "whale_watching", "orcas", "whales"), as.numeric))%>%
    ##This code will remove the dates of the flights that had fog
   filter(!Date %in% c("2022-06-18", "2022-07-31", "2022-08-24", "2022-06-04"))%>%
-    filter(rec_boats_fishing != 0)%>%
+ #   filter(rec_boats_fishing != 0)%>%
   #selecting all of the columns that are needed for further analysis
     select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
@@ -564,6 +575,19 @@ rec_boats_fishing2022 <- DFO_data_raw_2022%>%
 #Subsetting the dataframe to have points from only the region of interest
 rec_boats_fishing2022_subset <- subset(rec_boats_fishing2022, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
+
+#filtering to only include observations where there is at least one between the two types of boats. I.E. removing rows where both are 0.
+rec_boats_fishing2022_subset_clean <- rec_boats_fishing2022_subset[!(rec_boats_fishing2022_subset$rec_boats_fishing == 0 &
+                                                                 rec_boats_fishing2022_subset$rec_boats_running == 0),]
+
+
+#Used to make the points for the analyses of the fishing boats below
+rec_boats_only_fishing2022_subset_clean <- rec_boats_fishing2022_subset[!(rec_boats_fishing2022_subset$rec_boats_fishing == 0),]
+sum(rec_boats_only_fishing2022_subset_clean$rec_boats_fishing)
+
+#Making a df for plotting with only rec boats fishing
+rec_boats_fishing_only_2022 <- rec_boats_fishing2022_subset%>%
+  filter(rec_boats_fishing != 0)
 ```
 
 
@@ -594,19 +618,33 @@ rec_boats_fishing2021 <- DFO_data_raw_2021%>%
                   "whale_watching", "orcas", "whales"), as.numeric))%>%
    ##This code will remove the dates of the flights that had fog
   filter(!Date %in% c("2021-07-31", "2021-07-19", "2021-07-20", "2021-07-24"))%>%
-   filter(rec_boats_fishing != 0)%>%
+  # filter(rec_boats_fishing != 0)%>%
   select(c(UniqueID, `Filename/FlightID`, Year, Month, Day, Date, `Critical Period`, `Day Type`, `Creel Subarea`, GMA, PFMA, 
            `Pin ID`, Longitude, Latitude, rec_boats_fishing, rec_boats_running))
 
 #Subsetting the dataframe to have points from only the region of interest
 rec_boats_fishing2021_subset <- subset(rec_boats_fishing2021, Latitude >= 48.76511688 & Latitude <= 48.996722 & 
                                   Longitude >= -125.4114807 & Longitude <= -124.987017)
+
+
+rec_boats_fishing2021_subset_clean <- rec_boats_fishing2021_subset[!(rec_boats_fishing2021_subset$rec_boats_fishing == 0 
+                                                            &rec_boats_fishing2021_subset$rec_boats_running == 0),]
+
+
+#Used to make the points for the analyses of the fishing boats below
+rec_boats_only_fishing2021_subset_clean <- rec_boats_fishing2021_subset[!(rec_boats_fishing2021_subset$rec_boats_fishing == 0),]
+sum(rec_boats_only_fishing2021_subset_clean$rec_boats_fishing)
+
+
+#Making a df for plotting with only rec boats fishing
+rec_boats_fishing_only_2021 <- rec_boats_fishing2021_subset%>%
+  filter(rec_boats_fishing != 0)
 ```
 
 
 #### Combining the three years of data into one data frame
 ```{r Combining the three years of data by row}
-rec_boats_fishing_total <- rbind(rec_boats_fishing2021_subset, rec_boats_fishing2022_subset, rec_boats_fishing2023_subset)
+rec_boats_fishing_total <-  rbind(rec_boats_only_fishing2021_subset_clean, rec_boats_only_fishing2022_subset_clean, rec_boats_only_fishing2023_subset_clean)
 ```
 
 ### Adding the recreational fishing boat data to the data frame
@@ -750,9 +788,6 @@ overall_rls_data_final <- overall_rls_data_groups_with_openness%>%
  left_join(rec_fishing_boat_total_radius_1.5km_final, by = c("site_code"))%>%
   left_join(rec_fishing_boat_total_radius_2km_final, by = c("site_code"))%>%
   replace(is.na(.), 0)
-
-
-length(unique(overall_rls_data_final$site_code[overall_rls_data_final$protection_status == "unprotected"]))
 ```
 
 
@@ -929,9 +964,7 @@ overall_rls_data_final_minor_shifted <- overall_rls_data_final%>%
       legend.title = element_text(size = 14),
       legend.margin = margin(0.3, 0.3, 0.3, 0.3))+
   #Adds a diamond for Bamfield
-  geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange")+
-  #Adds a triangle for Pill Point
-  geom_point(aes(x = -125.082355, y = 48.966445), shape = 24, size = 5, fill = "#73D055FF"))
+  geom_point(aes(x = -125.134813, y = 48.829), shape = 23, size = 5, fill = "orange"))
 ```
 
 ```{r Making the site map with the van isl inset}
@@ -1034,11 +1067,11 @@ For this plot we used 2023 and 1.5 km radii as examples of the data we saw for t
     geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
    #This plots the DFO plane flight path
    geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
-  geom_point(data = rec_boats_fishing2023, 
+  geom_point(data = rec_boats_only_fishing2023_subset_clean, 
              mapping = aes(x = Longitude, y = Latitude),
              size = 0.8, fill = "#070707")+
    #This plots the 1.5km radii around each RLS site
-    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.3)+
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.6)+
    #this plots the RLS sites
     geom_point(overall_rls_data_final, 
               mapping = aes(x = longitude, y = latitude),
@@ -1064,6 +1097,82 @@ ggsave("total_rec_boat_map_2023_1.5km_track.pdf", plot = total_rec_boats_map_202
        path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
 ```
 
+
+### 2021 data
+
+```{r total rec boats within 1.5 km 2021}
+(total_rec_boats_map_2021_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_point(data = rec_boats_only_fishing2021_subset_clean, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+      geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+    #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.6)+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2021_with_protected_areas.pdf", plot = total_rec_boats_map_2021_test,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
+
+### 2022 data
+
+```{r total rec boats within 1.5 km 2022}
+(total_rec_boats_map_2022_test <- ggplot()+
+    geom_sf(data = VI_base_layer_hi_res_sf_subset, colour = "darkgrey", fill = "lightgrey")+
+  geom_point(data = rec_boats_only_fishing2022_subset_clean, 
+             mapping = aes(x = Longitude, y = Latitude),
+             size = 0.8, fill = "#070707")+
+      geom_sf(data = broken_group_RCA, fill = "blue", colour ="blue", alpha = 0.1)+
+   geom_sf(data = numukamis_area, fill = "blue", colour = "blue", alpha = 0.2)+
+   geom_sf(data = baeria_rocks_er, fill = "blue", colour = "blue", alpha = 0.2)+
+    #This plots the DFO plane flight path
+   geom_sf(data = dfo_flight_track, colour =  "#355173", size = 3)+
+   #This plots the 1.5km radii around each RLS site
+    geom_sf(data = site_locations_radius_1.5km, fill = "#E95E48", alpha = 0.6)+
+   #this plots the RLS sites
+    geom_point(overall_rls_data_final, 
+              mapping = aes(x = longitude, y = latitude),
+              shape = 21, size = 3, colour = "black")+
+    coord_sf(xlim = c(long_min + 0.02, long_max - 0.035),
+           ylim = c(lat_min + 0.01, lat_max - 0.03)) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme.figure() +
+   theme(axis.text.y = element_text(angle = 45))+
+ scale_x_continuous(breaks = c(-125.35, -125.20, -125.05)) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  annotation_scale(location = "br", text_cex = 1.3))
+```
+
+```{r Saving the rec boats plot with dfo flight track}
+ggsave("total_rec_boat_map_2022_with_protected_areas.pdf", plot = total_rec_boats_map_2022_test,
+       path = here("./04_plots/manuscript_figures_rough"), width = 160, height = 120, units = "mm")
+```
 
 # Doing further analysis of the DFO boat data
 
