@@ -2148,7 +2148,7 @@ summary(dec_mod_glmm_site)
 ```
 
 
-```{r Testing for spatial autocorrelation for dec mod no RE}
+```{r Testing for spatial autocorrelation for dec mod RE}
 dec_mod_glmm_site_resids <- simulateResiduals(dec_mod_glmm_site)
 
 site_group <- overall_rls_data_final$site_code
@@ -2168,7 +2168,7 @@ hist(protected_total_fish$Pomaulax_gibberosus)
 hist(unprotected_total_fish$Pomaulax_gibberosus)
 ```
 
-Effingham west has crazy outliers for the numbers of red turban snails so i am going to try removing this site from the analysis as it appears to be causing some issues.
+Effingham west has very large outliers (outside 1.5x interquartile range) and is causing issues with model fitting. I ran the model with and without Effingham west and the trends were very similar.
 
 ```{r Removing outliers for snail counts}
 snail_model_data <- overall_rls_data_final%>%
@@ -2178,7 +2178,7 @@ snail_model_data <- overall_rls_data_final%>%
 ### Snail glmm site no outliers
 
 This is the model with Effingham West removed.
-```{r Snail mod glmm site}
+```{r Snail mod glmm site no outliers}
 snail_mod_glmm_site_no_outliers <- glmmTMB(Pomaulax_gibberosus ~ protection_status + (1|site_code),
                          data = snail_model_data,
                          family = glmmTMB::nbinom1(link = "log"))
@@ -2269,8 +2269,11 @@ To make plots for each of the models I first predicted marginal means and 95% co
 ### Predicting means with CI
 
 ```{r Predicting fish abundance mean etc}
+#Using emmeans to get estimated marginal means for fish abundance between protected and unprotected sites on the response scale
+#Getting the estimated mean fish abundance for each level of protection status
 fish_ab_sum_stats <- emmeans::emmeans(fish_ab_spatiotemp, ~ protection_status, type = "response")
 
+#Confint gives confidence intervals for the estimates
 confint(fish_ab_sum_stats)
 fish_ab_sum_stats<- as.data.frame(confint(fish_ab_sum_stats))
 #must use emmeans because ggpredict does not work with sdmTMB
@@ -2302,6 +2305,7 @@ fish_ab_sum_stats<- as.data.frame(confint(fish_ab_sum_stats))
 ### Predicting means with CI
 
 ```{r Predicting fish species richness mean etc}
+#Using ggpredict to get model predictions for species richness at protected and unprotected sites
 fish_sp_rich_sum_stats <- ggpredict(fish_sp_rich_glmm_site,
                                terms = c("protection_status"),
                                type = "fixed",
